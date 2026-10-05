@@ -1,9 +1,9 @@
 /* ─────────────────────────────────────────────────────────────
-   Rumbo — Color tokens
-   Source of truth: fleteControl frontend/src/index.css (@theme)
-   + docs/14-marca-rumbo.md. "Azul ruta" primary, "ámbar señal"
-   accent, warm paper backgrounds. Light is default; dark mode
-   activates with [data-theme="dark"] on <html> or <body>.
+   Rumboo — Color tokens
+   "Azul ruta" primary (confianza, señalización vial), "ámbar señal"
+   accent (una persona tiene que actuar), warm paper backgrounds.
+   Light is default; dark mode activates with [data-theme="dark"]
+   on <html> or <body>.
    ───────────────────────────────────────────────────────────── */
 :root {
   /* Base palette */
@@ -18,7 +18,7 @@
   --color-line: #e7e2d7;           /* default border */
   --color-line-strong: #d8d3c7;    /* strong border */
 
-  /* Azul ruta — primary */
+  /* Azul ruta — primary: acciones, enlaces, viaje en ruta */
   --color-primary: #1a4f8b;
   --color-primary-dark: #0e3260;
   --color-primary-soft: #3f77be;   /* hover */
@@ -26,7 +26,7 @@
   --color-on-primary: #ffffff;
   --color-on-primary-muted: #bad2ec;
 
-  /* Ámbar señal — accent (CTA tomar foto) */
+  /* Ámbar señal — accent: la acción humana pendiente (aprobar cumplido) */
   --color-accent: #f5a623;
   --color-accent-dark: #c97f0a;
   --color-accent-subtle: #fbf1dc;

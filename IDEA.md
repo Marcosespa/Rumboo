@@ -1,6 +1,18 @@
-# Liquida — Monitoreo Inteligente de Viajes de Carga
+# Rumboo — Monitoreo Inteligente de Viajes de Carga
 
 > **En una frase:** agentes de IA que acompañan cada viaje de carga desde que sale hasta que se cumple en el RNDC: vigilan la ubicación del camión por satelital, hablan con el conductor por llamada y WhatsApp, informan a la transportadora y, al llegar, procesan el cumplido.
+
+## Tesis central
+
+> **Ayudamos a tu equipo de tráfico a recuperar, revisar y cerrar los cumplidos con menos trabajo manual, integrándonos con sus herramientas actuales.**
+
+Nuestro conocimiento de la operación transportadora se traduce en un producto que acompaña cada viaje, gestiona sus novedades y reúne la información necesaria para cerrarlo. La ventaja se demostrará en tiempo ahorrado, menos pendientes y viajes correctamente cerrados.
+
+**Primer MVP:** scraper de Satrack y WhatsApp mediante OpenWA. La API oficial de Satrack y la API oficial de WhatsApp quedan para una evolución futura.
+
+**Visión futura:** cuando tú no estés, nuestros agentes de IA podrán contactar al cliente por llamada y mensajes, recopilar información, gestionar faltantes y avanzar la resolución de problemas hasta dejar el caso listo para tu revisión y aprobación final. Los casos que requieran intervención humana se escalarán con el contexto completo. Esta capacidad se desarrollará después del MVP.
+
+El análisis de utilidad, viabilidad, diferenciación y evolución del producto está en [TESIS.md](TESIS.md).
 
 ---
 
@@ -38,8 +50,10 @@ Un sistema que, para cada viaje registrado por una transportadora:
 
 ### No incluye (por ahora)
 - **Fase 1 – Agente de correo** que extrae propuestas de viaje (se pospone).
+- API oficial de Satrack (se usa el scraper en el MVP).
 - API oficial de WhatsApp de Meta (se usa OpenWA en el MVP).
-- Liquidación del viaje (flete − anticipo − descuentos), pagos y facturación.
+- Agentes que llaman al cliente y gestionan problemas hasta dejar el caso listo para aprobación final (visión futura).
+- Rumbooción del viaje (flete − anticipo − descuentos), pagos y facturación.
 - Satelitales distintos a Satrack.
 - App para conductores.
 

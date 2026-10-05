@@ -1,7 +1,9 @@
 /* ─────────────────────────────────────────────────────────────
-   Rumbo — Spacing & radii tokens
+   Rumboo — Spacing & radii tokens
    Generous rounding everywhere: controls 16px, inner cards 24px,
-   panels 28–32px, pills fully round. Tap targets ≥ 44px.
+   cards 28px, panels 32px, pills fully round.
+   The bandeja is desktop-first (sidebar + wide content) and
+   collapses to one column with bottom navigation under 860px.
    ───────────────────────────────────────────────────────────── */
 :root {
   --space-1: 4px;
@@ -14,14 +16,17 @@
   --space-10: 40px;
 
   --radius-control: 16px;   /* buttons, inputs, segmented items */
-  --radius-chip: 14px;      /* nested segmented buttons */
-  --radius-subcard: 24px;   /* inner list cards */
-  --radius-card: 28px;      /* section cards, nav bar */
+  --radius-chip: 14px;      /* nested segmented buttons, icon boxes */
+  --radius-subcard: 24px;   /* inner list cards, rows */
+  --radius-card: 28px;      /* section cards, nav bars */
   --radius-panel: 32px;     /* hero panels */
   --radius-pill: 999px;
 
-  --tap-min: 44px;          /* minimum touch target */
-  --page-pad-x: 20px;       /* px-5 page gutter */
-  --stack-gap: 16px;        /* space-y-4 between sections */
-  --content-max: 520px;     /* max width of mobile content / nav */
+  --tap-min: 44px;          /* minimum touch/click target */
+  --page-pad-x: 20px;       /* mobile page gutter */
+  --page-pad-x-lg: 32px;    /* desktop page gutter */
+  --stack-gap: 16px;        /* gap between sections */
+  --sidebar-width: 248px;   /* desktop side navigation */
+  --content-max: 1240px;    /* max width of desktop content */
+  --content-narrow: 560px;  /* forms, login, mobile column */
 }

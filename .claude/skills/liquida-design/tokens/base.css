@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────
-   Rumbo — Base styles & keyframes
+   Rumboo — Base styles & keyframes
    ───────────────────────────────────────────────────────────── */
 html {
   color-scheme: light;
@@ -34,11 +34,16 @@ input, textarea, select, button {
   font-family: inherit;
 }
 
-@keyframes rumbo-spin {
+/* Figures operators compare: kg, %, horas, manifiestos */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes lq-spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes rumbo-shimmer {
+@keyframes lq-shimmer {
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
@@ -48,13 +53,19 @@ input, textarea, select, button {
     var(--color-cloud) 50%,
     var(--color-cloud-soft) 100%);
   background-size: 800px 100%;
-  animation: rumbo-shimmer 1.4s infinite linear;
+  animation: lq-shimmer 1.4s infinite linear;
 }
 
-@keyframes rumbo-slide-up {
+/* Live dot: the only looping animation — a truck reporting position */
+@keyframes lq-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(26, 79, 139, 0.35); }
+  100% { box-shadow: 0 0 0 10px rgba(26, 79, 139, 0); }
+}
+
+@keyframes lq-slide-up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-slide-up {
-  animation: rumbo-slide-up 0.25s ease-out both;
+  animation: lq-slide-up 0.25s ease-out both;
 }

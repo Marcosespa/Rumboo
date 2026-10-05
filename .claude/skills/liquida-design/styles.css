@@ -1,4 +1,4 @@
-/* Rumbo Design System — global CSS entry point.
+/* Rumboo Design System — global CSS entry point.
    Consumers link this one file; everything else is reached via @import. */
 @import "./tokens/fonts.css";
 @import "./tokens/colors.css";
@@ -6,4 +6,4 @@
 @import "./tokens/spacing.css";
 @import "./tokens/effects.css";
 @import "./tokens/base.css";
-@import "./components/rumbo-ui.css";
+@import "./components/Rumboo-ui.css";
