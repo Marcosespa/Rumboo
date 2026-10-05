@@ -1,0 +1,60 @@
+/* ─────────────────────────────────────────────────────────────
+   Rumbo — Base styles & keyframes
+   ───────────────────────────────────────────────────────────── */
+html {
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-paper);
+}
+
+input, textarea, select, button {
+  font-family: inherit;
+}
+
+@keyframes rumbo-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes rumbo-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg,
+    var(--color-cloud-soft) 0%,
+    var(--color-cloud) 50%,
+    var(--color-cloud-soft) 100%);
+  background-size: 800px 100%;
+  animation: rumbo-shimmer 1.4s infinite linear;
+}
+
+@keyframes rumbo-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: rumbo-slide-up 0.25s ease-out both;
+}

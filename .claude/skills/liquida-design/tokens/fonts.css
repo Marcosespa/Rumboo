@@ -1,0 +1,8 @@
+/* Rumbo webfonts.
+   - UI font: Inter (brand-official).
+   - Display font: Inter Tight (brand-official for headings and hero
+     figures). Both loaded from Google Fonts.
+   Decision note: the original brand doc referenced licensed
+   "Neue Haas Grotesk Display"; Rumbo holds no license, so Inter Tight
+   was adopted as the official display family (June 2026). */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap");

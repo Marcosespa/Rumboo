@@ -1,0 +1,36 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Estados semánticos" subtitle="Siempre color + icono + texto; nunca solo color" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body style="margin:0;padding:14px;">
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+  <div style="border-radius:18px;border:1px solid var(--color-line);background:var(--color-success-subtle);padding:12px 14px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="width:10px;height:10px;border-radius:99px;background:var(--color-success);"></span>
+      <strong style="font-size:13px;color:var(--color-success-text);">Al día / Pagado</strong>
+    </div>
+    <p style="margin:6px 0 0;font-size:11px;color:var(--color-success-text);">--color-success · #0F6E56</p>
+    <p style="margin:2px 0 0;font-size:11px;color:var(--color-mist);">Registros guardados, pagos recibidos</p>
+  </div>
+  <div style="border-radius:18px;border:1px solid var(--color-line);background:var(--color-warning-subtle);padding:12px 14px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="width:10px;height:10px;border-radius:99px;background:var(--color-warning);"></span>
+      <strong style="font-size:13px;color:var(--color-warning-text);">Pendiente / Por vencer</strong>
+    </div>
+    <p style="margin:6px 0 0;font-size:11px;color:var(--color-warning-text);">--color-warning · #BA7517</p>
+    <p style="margin:2px 0 0;font-size:11px;color:var(--color-mist);">Atención próxima, sin urgencia</p>
+  </div>
+  <div style="border-radius:18px;border:1px solid var(--color-line);background:var(--color-error-subtle);padding:12px 14px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="width:10px;height:10px;border-radius:99px;background:var(--color-error);"></span>
+      <strong style="font-size:13px;color:var(--color-error-text);">Urgente / Vencido</strong>
+    </div>
+    <p style="margin:6px 0 0;font-size:11px;color:var(--color-error-text);">--color-error · #D8432F</p>
+    <p style="margin:2px 0 0;font-size:11px;color:var(--color-mist);">OCR fallido, documentos vencidos</p>
+  </div>
+</div>
+</body>
+</html>
