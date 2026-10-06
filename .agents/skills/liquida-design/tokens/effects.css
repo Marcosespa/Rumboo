@@ -1,0 +1,22 @@
+/* ─────────────────────────────────────────────────────────────
+   Rumboo — Elevation, motion & focus tokens
+   Low warm shadows; hover = lift -2px + deeper shadow;
+   one easing (ease-out 300ms) for everything.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 6px 24px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-panel: 0 16px 48px rgba(0, 0, 0, 0.07);
+  --shadow-hero: 0 20px 56px rgba(0, 0, 0, 0.18);
+  --shadow-nav: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+  --ease-out: cubic-bezier(0, 0, 0.2, 1); /* @kind other */
+  --duration: 300ms; /* @kind other */
+  --transition-all: all var(--duration) var(--ease-out);
+
+  --hover-lift: translateY(-2px); /* @kind other */
+
+  --focus-ring: 0 0 0 4px rgba(26, 79, 139, 0.1);     /* primary/10 */
+  --focus-ring-strong: 0 0 0 2px rgba(26, 79, 139, 0.15);
+}
