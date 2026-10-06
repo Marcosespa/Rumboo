@@ -1,0 +1,22 @@
+name: rumboo-satrack-local
+services:
+  satrack:
+    image: rumboo-satrack:local
+    build: .
+    env_file: .env
+    environment:
+      DATA_DIR: /data/satrack
+    ports:
+      - "127.0.0.1:${SCRAPER_PORT:-18081}:8080"
+    volumes:
+      - satrack_data:/data/satrack
+    shm_size: 512mb
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+volumes:
+  satrack_data:

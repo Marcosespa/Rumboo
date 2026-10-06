@@ -1,0 +1,402 @@
+{
+  "info": {
+    "name": "Rumboo · satrack-service",
+    "_postman_id": "6b1d6c0e-3a63-4d8e-9f4b-2f5c1a7e0b11",
+    "description": "Consulta los vehículos y las posiciones de una cuenta Satrack a través del microservicio.\n\nUso:\n1. Importa esta colección y el environment `satrack-local.postman_environment.json`.\n2. En el environment completa `apiKey` (SATRACK_SERVICE_API_KEY del .env), `satrackUsername` y `satrackPassword`.\n3. Ejecuta la carpeta \"Flujo completo\" con el Collection Runner, o las peticiones en orden. Las peticiones de resultado se repiten solas en el Runner hasta que el job termina; a mano, vuelve a enviarlas hasta ver `status: done`.\n4. Abre la pestaña **Visualize** de las peticiones de resultado para ver la tabla de vehículos y posiciones.\n\nEl servicio responde 202 y procesa en segundo plano; con Satrack real el primer job tarda 30–90 s (login con Chrome). Los siguientes reutilizan la sesión.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-Api-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "vehiclesJobId",
+      "value": ""
+    },
+    {
+      "key": "positionsJobId",
+      "value": ""
+    },
+    {
+      "key": "platesJson",
+      "value": "[\"ABC123\"]"
+    },
+    {
+      "key": "pollAttempts",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "Flujo completo",
+      "item": [
+        {
+          "name": "1. Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Proveedor activo (`satrack` o `simulator`), jobs en curso y sesiones de Chrome abiertas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Servicio arriba', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "console.log('Proveedor:', body.provider);",
+                  "if (body.provider !== 'satrack') console.warn('El servicio corre con el simulador: los datos NO son de Satrack. Arráncalo con PROVIDER=satrack.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Vehículos · crear job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": \"{{vehiclesJobId}}\",\n  \"type\": \"vehicles\",\n  \"account\": {{accountJson}},\n  \"plates\": []\n}"
+            },
+            "description": "Pide todas las placas que ve la cuenta. Responde 202 de inmediato; el resultado se consulta en la petición 3."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const username = pm.environment.get('satrackUsername');",
+                  "const password = pm.environment.get('satrackPassword');",
+                  "if (!username || !password || !pm.environment.get('apiKey')) throw new Error('Completa las credenciales y apiKey del environment local.');",
+                  "pm.variables.set('accountJson', JSON.stringify({id: pm.environment.get('accountId'), username, password}));",
+                  "if (!pm.environment.get('satrackUsername') || !pm.environment.get('satrackPassword')) {",
+                  "  throw new Error('Completa satrackUsername y satrackPassword en el environment.');",
+                  "}",
+                  "pm.collectionVariables.set('vehiclesJobId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.collectionVariables.set('pollAttempts', '0');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job aceptado (202)', () => pm.response.to.have.status(202));",
+                  "if (pm.response.code !== 202) pm.execution.setNextRequest(null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Vehículos · resultado",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{vehiclesJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{vehiclesJobId}}"
+              ]
+            },
+            "description": "Estado queued → running → done. result.vehicles devuelve placa, alias, ubicación, velocidad, estado y fecha disponibles. Guarda las placas en platesJson para la siguiente consulta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job encontrado', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); return; }",
+                  "const job = pm.response.json();",
+                  "if (job.status !== 'done') {",
+                  "  const attempts = Number(pm.collectionVariables.get('pollAttempts')) + 1;",
+                  "  pm.collectionVariables.set('pollAttempts', String(attempts));",
+                  "  console.log(`Job ${job.status}; reintento ${attempts}`);",
+                  "  if (attempts < 60) { setTimeout(() => {}, 3000); pm.execution.setNextRequest(pm.info.requestName); }",
+                  "  else { pm.test('El job terminó dentro del plazo', () => pm.expect.fail('Se agotaron 60 consultas')); pm.execution.setNextRequest(null); }",
+                  "  return;",
+                  "}",
+                  "pm.collectionVariables.set('pollAttempts', '0');",
+                  "const result = job.result;",
+                  "if (result.status === 'failed') { pm.test('Proveedor disponible', () => pm.expect.fail(result.errors.map(e => e.code).join(', '))); pm.execution.setNextRequest(null); return; }",
+                  "pm.test('Consulta a Satrack exitosa', () => pm.expect(result.status, JSON.stringify(result.errors)).to.not.equal('failed'));",
+                  "const plates = result.vehicles.map(v => v.plate).filter(p => /^[A-Z]{3}\\d{3}$/.test(p));",
+                  "pm.collectionVariables.set('platesJson', JSON.stringify(plates));",
+                  "if (!plates.length) pm.execution.setNextRequest(null);",
+                  "console.log(`${result.vehicles.length} vehículos; ${plates.length} con placa reconocible`);",
+                  "pm.visualizer.set(`",
+                  "<style>body{font-family:sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;text-align:left}th{background:#1a4f8b;color:#fff}.err{color:#d8432f}</style>",
+                  "<h3>{{count}} vehículos · estado {{status}}</h3>",
+                  "{{#each errors}}<p class='err'>{{code}}: {{message}}</p>{{/each}}",
+                  "<table><tr><th>Placa</th><th>Alias en Satrack</th><th>Estado</th><th>Dirección</th><th>Lat, Lng</th><th>Último reporte (texto Satrack)</th><th>Id dispositivo</th><th>Estado</th><th>Dirección</th><th>Latitud</th><th>Longitud</th><th>km/h</th><th>Reporte UTC</th></tr>",
+                  "{{#each vehicles}}<tr><td>{{plate}}</td><td>{{name}}</td><td>{{status}}</td><td>{{address}}</td><td>{{#if lat}}{{lat}}, {{lng}}{{else}}sin coordenadas{{/if}}</td><td>{{reported_at_raw}}</td><td>{{device_id}}</td><td>{{status}}</td><td>{{address}}</td><td>{{lat}}</td><td>{{lng}}</td><td>{{speed_kmh}}</td><td>{{reported_at}}</td></tr>{{/each}}</table>`,",
+                  "  { count: result.vehicles.length, status: result.status, vehicles: result.vehicles, errors: result.errors });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Posiciones · crear job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": \"{{positionsJobId}}\",\n  \"type\": \"positions\",\n  \"account\": {{accountJson}},\n  \"plates\": {{platesJson}}\n}"
+            },
+            "description": "Última posición de las placas de `platesJson` (la llena la petición 3; puedes editarla a mano, p. ej. `[\"ABC123\",\"XYZ789\"]`)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const username = pm.environment.get('satrackUsername');",
+                  "const password = pm.environment.get('satrackPassword');",
+                  "if (!username || !password || !pm.environment.get('apiKey')) throw new Error('Completa las credenciales y apiKey del environment local.');",
+                  "pm.variables.set('accountJson', JSON.stringify({id: pm.environment.get('accountId'), username, password}));",
+                  "pm.collectionVariables.set('positionsJobId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.collectionVariables.set('pollAttempts', '0');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job aceptado (202)', () => pm.response.to.have.status(202));",
+                  "if (pm.response.code !== 202) pm.execution.setNextRequest(null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Posiciones · resultado",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{positionsJobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{positionsJobId}}"
+              ]
+            },
+            "description": "Posición, dirección, estado y hora del último reporte por placa. `VEHICLE_NOT_FOUND` si la placa no está en la cuenta; `POSITION_UNAVAILABLE` si Satrack no expone coordenadas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job encontrado', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); return; }",
+                  "const job = pm.response.json();",
+                  "if (job.status !== 'done') {",
+                  "  const attempts = Number(pm.collectionVariables.get('pollAttempts')) + 1;",
+                  "  pm.collectionVariables.set('pollAttempts', String(attempts));",
+                  "  console.log(`Job ${job.status}; reintento ${attempts}`);",
+                  "  if (attempts < 60) { setTimeout(() => {}, 3000); pm.execution.setNextRequest(pm.info.requestName); }",
+                  "  else { pm.test('El job terminó dentro del plazo', () => pm.expect.fail('Se agotaron 60 consultas')); pm.execution.setNextRequest(null); }",
+                  "  return;",
+                  "}",
+                  "pm.collectionVariables.set('pollAttempts', '0');",
+                  "const result = job.result;",
+                  "if (result.status === 'failed') { pm.test('Proveedor disponible', () => pm.expect.fail(result.errors.map(e => e.code).join(', '))); pm.execution.setNextRequest(null); return; }",
+                  "pm.test('Consulta a Satrack exitosa', () => pm.expect(result.status, JSON.stringify(result.errors)).to.not.equal('failed'));",
+                  "const rows = result.positions.map(p => ({ ...p, map: p.lat != null ? `https://www.google.com/maps?q=${p.lat},${p.lng}` : null }));",
+                  "pm.visualizer.set(`",
+                  "<style>body{font-family:sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}th{background:#1a4f8b;color:#fff}.err{color:#d8432f}</style>",
+                  "<h3>{{count}} posiciones · estado {{status}}</h3>",
+                  "{{#each errors}}<p class='err'>{{plate}} {{code}}: {{message}}</p>{{/each}}",
+                  "<table><tr><th>Placa</th><th>Alias</th><th>Estado</th><th>Dirección</th><th>km/h</th><th>Lat, Lng</th><th>Último reporte (UTC)</th><th>Texto original</th></tr>",
+                  "{{#each rows}}<tr><td>{{plate}}</td><td>{{name}}</td><td>{{status}}</td><td>{{address}}</td><td>{{speed_kmh}}</td>",
+                  "<td>{{#if map}}<a href='{{map}}' target='_blank'>{{lat}}, {{lng}}</a>{{else}}sin coordenadas{{/if}}</td>",
+                  "<td>{{reported_at}}</td><td>{{reported_at_raw}}</td></tr>{{/each}}</table>`,",
+                  "  { count: rows.length, status: result.status, rows, errors: result.errors });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Casos de error",
+      "item": [
+        {
+          "name": "API key inválida (401)",
+          "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-Api-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "clave-incorrecta",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payload inválido (422, sin eco de la contraseña)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": \"{{$guid}}\",\n  \"type\": \"positions\",\n  \"account\": { \"id\": \"prueba\", \"username\": \"prueba\", \"password\": \"no-se-devuelve\" },\n  \"plates\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('La respuesta no incluye la contraseña', () => pm.expect(pm.response.text()).to.not.include('no-se-devuelve'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

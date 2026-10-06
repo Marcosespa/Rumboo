@@ -1,0 +1,88 @@
+name: rumboo
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rumboo}
+      POSTGRES_DB: ${POSTGRES_DB:-rumboo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Ejecuta scripts/setup_env.py}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  satrack:
+    build: ./satrack-service
+    environment:
+      SATRACK_SERVICE_API_KEY: ${SATRACK_SERVICE_API_KEY:?Configura .env}
+      CALLBACK_SECRET: ${CALLBACK_SECRET:?Configura .env}
+      # SATRACK_CALLBACK_URL= (vacío) corre el scraper solo, sin backend; el resultado se lee con GET /v1/jobs/{id}.
+      CALLBACK_URL: ${SATRACK_CALLBACK_URL-http://api:8000/internal/satrack/callback}
+      PROVIDER: ${PROVIDER:-satrack}
+      MAX_CONCURRENCY: ${MAX_CONCURRENCY:-3}
+      MAX_SESSIONS: ${MAX_SESSIONS:-3}
+      JOB_TIMEOUT_S: 120
+      DATA_DIR: /data/satrack
+    ports:
+      - "127.0.0.1:${SCRAPER_PORT:-8081}:8080"
+    volumes:
+      - satrack_data:/data/satrack
+    shm_size: 512mb
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-rumboo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-rumboo}
+      SECRET_KEY: ${SECRET_KEY:?Configura .env}
+      SATRACK_SERVICE_API_KEY: ${SATRACK_SERVICE_API_KEY:?Configura .env}
+      CALLBACK_SECRET: ${CALLBACK_SECRET:?Configura .env}
+      SATRACK_SERVICE_URL: http://satrack:8080
+      SCHEDULER_INTERVAL_S: ${SCHEDULER_INTERVAL_S:-60}
+      CONSULTA_TIMEOUT_S: 240
+      BOOTSTRAP_USERNAME: ${BOOTSTRAP_USERNAME:-admin}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:-}
+      BOOTSTRAP_CARRIER: ${BOOTSTRAP_CARRIER:-Transportes Demo}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      PROVIDER: ${PROVIDER:-satrack}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      satrack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  satrack_data:

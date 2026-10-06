@@ -95,7 +95,7 @@ Canales de carga: formulario web y plantilla Excel. Validaciones: placa y cédul
 ### Fase 3 — Monitoreo en tiempo real
 
 **3.1 Ubicación (Satrack)**
-- Scraper con navegador automatizado (Playwright) que inicia sesión y extrae posición, velocidad, hora del último reporte y estado.
+- Scraper con navegador automatizado (Selenium, microservicio Python + FastAPI) que inicia sesión y extrae posición, dirección, hora del último reporte y estado.
 - Frecuencia: cada 5–10 min por vehículo (configurable).
 - Reutilizar sesiones y respetar límites para no ser bloqueados.
 - Se guarda cada punto en el historial del viaje.
@@ -133,7 +133,7 @@ Canales de carga: formulario web y plantilla Excel. Validaciones: placa y cédul
 
 ```
                  ┌────────────────────┐
-  Transportadora │  Bandeja web       │  (Next.js)
+  Transportadora │  Bandeja web       │  (React + Vite)
   ──────────────▶│  registro/alertas  │
                  └─────────┬──────────┘
                            │ REST
@@ -145,7 +145,7 @@ Canales de carga: formulario web y plantilla Excel. Validaciones: placa y cédul
 ┌────▼─────┐ ┌─────▼──────┐ ┌──────▼─────┐ ┌──────▼─────┐ ┌─────▼─────┐
 │ Scraper  │ │ Motor de   │ │ Agente de  │ │ Servicio   │ │ Conector  │
 │ Satrack  │ │ reglas +   │ │ voz        │ │ OpenWA     │ │ RNDC      │
-│(Playwr.) │ │ scheduler  │ │ (llamadas) │ │ (WhatsApp) │ │ (SOAP)    │
+│(Selenium)│ │ scheduler  │ │ (llamadas) │ │ (WhatsApp) │ │ (SOAP)    │
 └──────────┘ └────────────┘ └────────────┘ └────────────┘ └───────────┘
                                    │              │
                                    └──── LLM ─────┘  (clasificación + visión)
@@ -160,12 +160,12 @@ Canales de carga: formulario web y plantilla Excel. Validaciones: placa y cédul
 - **Backend:** Python + FastAPI
 - **Base de datos:** Postgres (+ PostGIS para rutas y geocercas)
 - **Tareas programadas y colas:** Celery/RQ + Redis (o APScheduler al inicio)
-- **Scraping:** Playwright
+- **Scraping:** Selenium (crawler existente) en un microservicio Python + FastAPI
 - **WhatsApp:** OpenWA (servicio Node.js aparte)
 - **Voz:** proveedor de telefonía + agente de voz (por definir, ver §10)
 - **IA:** LLM con visión detrás de una capa de abstracción
 - **Archivos:** S3 o equivalente
-- **Frontend:** Next.js
+- **Frontend:** React + Vite + Tailwind
 
 ### Reglas de diseño
 - **La IA interpreta, no decide sola:** clasifica respuestas y extrae datos de fotos; las alertas y validaciones las hace código determinístico.

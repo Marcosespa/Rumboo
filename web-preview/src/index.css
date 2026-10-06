@@ -1,0 +1,351 @@
+@import "tailwindcss";
+@import "./app.css";
+
+/* ─────────────────────────────────────────────────────────────
+   Rumbo — design tokens (marca "Rumbo", skill liquida-design)
+   Fuente de verdad: .claude/skills/liquida-design/tokens/*.css
+   Mismos nombres y valores; solo cambia la sintaxis (Tailwind 4 @theme).
+   Las fuentes (Inter / Inter Tight) se cargan con @fontsource en main.tsx.
+
+   Colisión de nombres: la skill define --text-body como COLOR (alias de
+   --color-ink) y como TAMAÑO (16px). En Tailwind 4 el namespace --text-* es de
+   tamaños de fuente, así que aquí --text-* son SOLO tamaños y los alias de
+   color (--text-secondary, --text-muted, --text-inverse, --text-link) no se
+   exponen: se usan los --color-* (text-ink, text-mist, text-faint, text-primary).
+   ───────────────────────────────────────────────────────────── */
+
+@theme static {
+  /* Solo existe la paleta, tipografía, radios y sombras de la marca: se vacían
+     los valores por defecto de Tailwind para que no se pueda usar uno ajeno. */
+  --color-*: initial;
+  --text-*: initial;
+  --leading-*: initial;
+  --tracking-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --ease-*: initial;
+  --animate-*: initial;
+
+  /* ── colors.css ─ Base palette */
+  --color-ink: #1c1c1a; /* primary text */
+  --color-paper: #faf8f4; /* app background */
+  --color-surface: #ffffff; /* elevated white surface */
+  --color-stone: #4f4e49; /* strong secondary text */
+  --color-mist: #6b6962; /* secondary text */
+  --color-faint: #9b988e; /* muted text */
+  --color-cloud: #eae5da; /* soft surface (strong) */
+  --color-cloud-soft: #f1ede4; /* soft surface (subtle) */
+  --color-line: #e7e2d7; /* default border */
+  --color-line-strong: #d8d3c7; /* strong border */
+
+  /* Azul ruta — primary */
+  --color-primary: #1a4f8b;
+  --color-primary-dark: #0e3260;
+  --color-primary-soft: #3f77be; /* hover */
+  --color-primary-subtle: #e3edf8; /* tinted surface */
+  --color-on-primary: #ffffff;
+  --color-on-primary-muted: #bad2ec;
+
+  /* Ámbar señal — accent (acción humana pendiente) */
+  --color-accent: #f5a623;
+  --color-accent-dark: #c97f0a;
+  --color-accent-subtle: #fbf1dc;
+  --color-on-accent: #3d2a05;
+
+  /* Semantic states — siempre color + icono + texto */
+  --color-success: #0f6e56;
+  --color-success-subtle: #eaf6f0;
+  --color-success-text: #085041;
+  --color-warning: #ba7517;
+  --color-warning-subtle: #fbf1dc;
+  --color-warning-text: #633806;
+  --color-error: #d8432f;
+  --color-error-subtle: #fcebe8;
+  --color-error-text: #a32d2d;
+  --color-info: #1a4f8b;
+  --color-info-subtle: #e3edf8;
+  --color-info-text: #0e3260;
+
+  /* ── typography.css */
+  --font-sans: "Inter", "Inter var", system-ui, -apple-system, sans-serif;
+  --font-display: "Inter Tight", "Inter Display", "Inter", system-ui, sans-serif;
+
+  --text-xs: 11px; /* overline labels, badges */
+  --text-sm: 13px; /* meta, captions, table secondary */
+  --text-base: 14px; /* UI controls, dense lists, table cells */
+  --text-body: 16px; /* reading text */
+  --text-lg: 18px; /* card titles */
+  --text-h2: 22px; /* section heading */
+  --text-h1: 28px; /* page title */
+  --text-hero: 36px; /* login headline */
+  --text-figure: 38px; /* protagonist figures (%, conteos) */
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-body: 1.5;
+  --leading-relaxed: 1.6;
+
+  --tracking-tight: -0.01em; /* headings */
+  --tracking-wide: 0.06em; /* brand wordmark chip, placas */
+  --tracking-overline: 0.2em; /* uppercase overlines */
+
+  /* ── spacing.css (radios) */
+  --radius-control: 16px; /* buttons, inputs, segmented items */
+  --radius-chip: 14px; /* nested segmented buttons, icon boxes */
+  --radius-subcard: 24px; /* inner list cards, rows */
+  --radius-card: 28px; /* section cards, nav bars */
+  --radius-panel: 32px; /* hero panels */
+  --radius-pill: 999px;
+
+  /* ── effects.css (sombras y easing) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 6px 24px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-panel: 0 16px 48px rgba(0, 0, 0, 0.07);
+  --shadow-hero: 0 20px 56px rgba(0, 0, 0, 0.18);
+  --shadow-nav: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ── base.css (animaciones). Los keyframes están más abajo.
+     lq-pulse no trae duración en la skill: 1.5s es el único valor añadido. */
+  --animate-spin: lq-spin 0.7s linear infinite;
+  --animate-shimmer: lq-shimmer 1.4s infinite linear;
+  --animate-live: lq-pulse 1.5s ease-out infinite;
+  --animate-slide-up: lq-slide-up 0.25s ease-out both;
+
+  /* Breakpoint de navegación: sidebar (nav:) desde 860px, barra inferior debajo. */
+  --breakpoint-nav: 860px;
+}
+
+/* Modo oscuro: mismos nombres, valores intercambiados (tokens/colors.css). */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  --color-ink: #f4f2ec;
+  --color-paper: #141413;
+  --color-surface: #1c1b19;
+  --color-stone: #c9c7be;
+  --color-mist: #a5a39a;
+  --color-faint: #807d74;
+  --color-cloud: #2a2925;
+  --color-cloud-soft: #1c1b19;
+  --color-line: #2e2d29;
+  --color-line-strong: #3a3933;
+  --color-primary: #7fb1e8;
+  --color-primary-dark: #a9cbf1;
+  --color-primary-soft: #a9cbf1;
+  --color-primary-subtle: #16304f;
+  --color-accent: #f5a623;
+  --color-accent-dark: #fac775;
+  --color-accent-subtle: #3a2c12;
+  --color-on-accent: #3d2a05;
+  --color-error: #f08576;
+  --color-error-subtle: #3a1d18;
+  --color-error-text: #f4a99e;
+  --color-success: #5dcaa5;
+  --color-success-subtle: #14302a;
+  --color-success-text: #8adcc0;
+  --color-warning: #ef9f27;
+  --color-warning-subtle: #38290f;
+  --color-warning-text: #f4bd6a;
+}
+
+/* Tokens que no son del tema de Tailwind (se usan con var() / (--token)). */
+:root {
+  /* spacing.css */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --tap-min: 44px; /* minimum touch/click target */
+  --page-pad-x: 20px; /* mobile page gutter */
+  --page-pad-x-lg: 32px; /* desktop page gutter */
+  --stack-gap: 16px; /* gap between sections */
+  --sidebar-width: 248px; /* desktop side navigation */
+  --content-max: 1240px; /* max width of desktop content */
+  --content-narrow: 560px; /* forms, login, mobile column */
+
+  /* typography.css */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* effects.css */
+  --duration: 300ms;
+  --transition-all: all var(--duration) var(--ease-out);
+  --hover-lift: translateY(-2px);
+  --focus-ring: 0 0 0 4px rgba(26, 79, 139, 0.1); /* primary/10 */
+  --focus-ring-strong: 0 0 0 2px rgba(26, 79, 139, 0.15);
+
+  /* Alias semánticos de superficie y borde (colors.css). Los alias --text-*
+     no se exponen: ver nota de colisión al inicio. */
+  --surface-app: var(--color-paper);
+  --surface-card: var(--color-paper);
+  --surface-soft: var(--color-cloud-soft);
+  --surface-inverse: var(--color-ink);
+  --border-default: var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --border-focus: var(--color-primary);
+}
+
+/* El modo oscuro también se puede activar con la clase de Tailwind dark:. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── Utilidades de la marca ────────────────────────────────── */
+
+/* Cifras que el coordinador compara: pesos, horas, placas. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hover: lift -2px + sombra más profunda (no aplica si está deshabilitado). */
+@utility hover-lift {
+  &:hover:not(:disabled) {
+    transform: var(--hover-lift);
+    box-shadow: var(--shadow-hover);
+  }
+}
+
+/* Foco visible: anillo azul de la marca. */
+@utility focus-ring {
+  &:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
+}
+
+/* Esqueleto de carga (único gradiente permitido: cloud-soft ↔ cloud). */
+@utility shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-cloud-soft) 0%,
+    var(--color-cloud) 50%,
+    var(--color-cloud-soft) 100%
+  );
+  background-size: 800px 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* ── Keyframes (tokens/base.css) ───────────────────────────── */
+@keyframes lq-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lq-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+/* Live dot: la única animación en bucle — un camión reportando posición */
+@keyframes lq-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(26, 79, 139, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(26, 79, 139, 0);
+  }
+}
+
+@keyframes lq-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Base (tokens/base.css) ────────────────────────────────── */
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Un modal nativo abierto bloquea el scroll de la página detrás. */
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    letter-spacing: var(--tracking-tight);
+    margin: 0;
+  }
+
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-paper);
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font-family: inherit;
+  }
+}
+
+/* Quien pide menos movimiento no ve entradas, brillos ni pulsos. El spinner
+   se mantiene: es la señal de que algo está cargando. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-live,
+  .shimmer {
+    animation: none;
+  }
+}
+
+/* ── Leaflet: hereda fuente y radios de la marca ───────────── */
+.leaflet-container {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  border-radius: var(--radius-subcard);
+  /* Aísla los z-index internos de Leaflet (400–1000) para que el mapa no
+     pase por encima del header, la barra inferior ni los diálogos. */
+  isolation: isolate;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-hover);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.leaflet-popup-tip {
+  background: var(--color-paper);
+}
+.leaflet-popup-content {
+  margin: var(--space-3) var(--space-4);
+  line-height: var(--leading-snug);
+}

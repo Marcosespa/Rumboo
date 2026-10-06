@@ -1,0 +1,11 @@
+export type User = {id: number; usuario: string; nombre: string; transportadora: {id: number; nombre: string}}
+export type Position = {id: number; lat: number | null; lng: number | null; velocidad_kmh: number | null; direccion: string; estado_gps: string; reportado_en: string | null; capturado_en: string; reportado_texto: string; viaje_id: number | null}
+export type Vehicle = {id: number; placa: string; propietario: string; en_satelital: boolean | null; ultima_posicion: Position | null}
+export type Driver = {id: number; nombre: string; cedula: string; telefono: string; autoriza_contacto: boolean}
+export type TripState = 'registrado' | 'programado' | 'en_ruta' | 'entregado' | 'cancelado'
+export type Remesa = {numero: string; cliente: string; peso_kg: number; cantidad: number | null}
+export type Trip = {id: number; manifiesto: string; origen: string; destino: string; estado: TripState; salida_estimada: string; llegada_estimada: string; peso_salida_kg: number; creado_en: string; actualizado_en: string; conductor: Driver; vehiculo: Vehicle; remesas?: Remesa[]; eventos?: {id: number; tipo: string; detalle: Record<string, unknown>; creado_en: string; usuario_id: number | null}[]}
+export type Account = {id: number; usuario: string; proveedor: string; estado: string; ultima_consulta_ok: string | null; ultimo_error: string | null; backoff_hasta: string | null; fallos_consecutivos: number; consulta_pendiente: boolean}
+export type Panel = {conteos: Record<string, number>; entregados_hoy: number; vehiculos_con_posicion: number; cuenta_satelital: Account | null; viajes_activos: Trip[]}
+export type Page<T> = {items: T[]; total: number; page: number; page_size: number}
+export type TripInput = {manifiesto: string; origen: string; destino: string; salida_estimada: string; llegada_estimada: string; conductor: Omit<Driver, 'id'>; vehiculo: {placa: string; propietario: string}; remesas: Remesa[]}

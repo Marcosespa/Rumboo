@@ -1,7 +1,7 @@
 # Rumboo — Implementación del MVP
 
 > Documento técnico de implementación. La visión de producto está en [IDEA.md](IDEA.md).
-> Este documento define **cómo se construye** y **todas las reglas** que el producto debe cumplir.
+> **Referencia técnica subordinada al [Plan maestro del MVP](backend/PLAN.md).** El alcance, las decisiones y los criterios vigentes se definen allí. Este documento conserva el detalle de reglas propuesto; sus discrepancias no autorizan requisitos adicionales.
 
 ---
 
@@ -10,8 +10,9 @@
 | Decisión | Elección MVP |
 |---|---|
 | Infraestructura | **Un solo servidor**, todo con `docker compose` |
-| Monolito | API + scheduler + motor de reglas + bandeja web (stack de IDEA.md) |
-| Satrack | **Microservicio aparte en Node.js** (`satrack-service`) |
+| Monolito | API FastAPI + scheduler + motor de reglas ([backend/PLAN.md](backend/PLAN.md)) |
+| Bandeja web | SPA React + Vite + Tailwind ([web/PLAN.md](web/PLAN.md)) |
+| Satrack | **Microservicio aparte en Python + FastAPI** (`satrack-service`) que envuelve el crawler Selenium existente ([satrack-service/PLAN.md](satrack-service/PLAN.md)) |
 | Comunicación monolito ↔ Satrack | **Request + callback HTTP**. Sin colas ni Redis |
 | Base de datos | Un Postgres  que **solo usa el monolito**. |
 | Archivos | Volumen local del servidor (`/data`) |
@@ -20,7 +21,7 @@
 ┌──────────────────────── Servidor único (docker compose) ───────────────────────┐
 │                                                                                │
 │  NGIX (HTTPS) ──▶ Bandeja web ──▶ Monolito ──── 1. POST /v1/jobs ───────────▶ │
-│                                    (API +         satrack-service (Node)       │
+│                                    (API +         satrack-service (Python)     │
 │                                    scheduler +    ◀─ 2. POST callback ──────── │
 │                                    reglas)                                     │
 │                                       │                                        │
@@ -42,11 +43,13 @@
 
 ### 2.2 Stack
 
-- Node.js 22 LTS + TypeScript
-- Fastify (HTTP) + zod (validación de payloads)
-- Playwright (login en Satrack)
-- `fetch` nativo (consultas de posición con la sesión obtenida)
-- pino (logs)
+- Python 3.12
+- FastAPI + Uvicorn (HTTP) + Pydantic (validación de payloads)
+- **Selenium 4 + Chromium headless**: el crawler existente (`crawler.py`) hace el login y lee la lista de vehículos del DOM
+- httpx (callback al monolito con reintentos)
+- `logging` estándar (logs)
+
+Se eligió Python + Selenium para **reutilizar el crawler que ya funciona** y tener un solo lenguaje con el monolito. El plan detallado está en [satrack-service/PLAN.md](satrack-service/PLAN.md).
 
 ### 2.3 Flujo
 
@@ -87,7 +90,7 @@ Todas las peticiones llevan el header `X-Api-Key: <SATRACK_SERVICE_API_KEY>`.
 Respuestas:
 
 - `202 Accepted {"job_id": "..."}`: el job quedó aceptado.
-- `400`: el payload es inválido.
+- `422`: el payload es inválido (validación de FastAPI).
 - `401`: el API key es inválido.
 - `409`: el `job_id` ya fue recibido; no se procesa dos veces.
 
@@ -98,7 +101,7 @@ Tipos de job:
 
 #### `GET /health`
 
-Responde `{"status":"ok","browser":"up","running_jobs":2}`.
+Responde `{"status":"ok","provider":"satrack","running_jobs":1,"queued_jobs":0,"sessions":2}`.
 
 ### 2.5 Callback al monolito
 
@@ -118,11 +121,11 @@ El microservicio hace `POST` a la URL fija `CALLBACK_URL` (variable de entorno, 
       "plate": "ABC123",
       "lat": 4.6097,
       "lng": -74.0817,
-      "speed_kmh": 0,
-      "heading": 180,
-      "ignition": false,
-      "reported_at": "2026-10-05T14:02:00Z",   // hora del GPS según Satrack
-      "address": "Vía Bogotá - Girardot km 23" // si Satrack la entrega
+      "speed_kmh": null,                       // la lista de Satrack no muestra velocidad (el simulador sí la envía)
+      "status": "on",                          // clase del ícono de estado en Satrack
+      "address": "Vía Bogotá - Girardot km 23",
+      "reported_at": "2026-10-05T14:02:00Z",   // hora del GPS normalizada a UTC; null si no se reconoce
+      "reported_at_raw": "05/10/2026 09:02:00" // texto original que muestra Satrack
     }
   ],
   "vehicles": [],                         // solo para type = vehicles: [{plate, device_id}]
@@ -140,7 +143,7 @@ Códigos de error:
 | `CAPTCHA_REQUIRED` | Satrack pidió captcha o 2FA | job |
 | `PROVIDER_CHANGED` | No se pudo leer la respuesta; Satrack cambió su web | job |
 | `PROVIDER_UNAVAILABLE` | Satrack caído o con timeout | job |
-| `TIMEOUT` | El job superó los 90 s | job |
+| `TIMEOUT` | El job superó `JOB_TIMEOUT_S` (120 s) | job |
 | `VEHICLE_NOT_FOUND` | La placa no está en la cuenta | placa |
 
 **Reintentos del callback:** si el monolito no responde 2xx, se reintenta a los 2 s, 10 s y 30 s. Después se descarta y se registra en el log. El monolito lo detecta por timeout (ver §3.3).
@@ -150,10 +153,10 @@ Códigos de error:
 1. **Un job a la vez por cuenta.** Hay un mutex por `account.id`. Si llega otro job de la misma cuenta, espera en fila.
 2. **Máximo 3 jobs en paralelo** en total (configurable con `MAX_CONCURRENCY`).
 3. **Una consulta por cuenta, no por placa.** Se piden todos los vehículos de la cuenta en una sola llamada y se filtran las placas pedidas.
-4. **Caché de sesión en memoria** por `account.id` (cookies y token). Solo se hace login si no hay sesión o si Satrack responde 401/403.
-5. **Playwright solo para el login.** Las consultas de posición usan `fetch` con las cookies, contra el endpoint JSON que use la web de Satrack. Si ese endpoint no existe, se lee el DOM con Playwright.
-6. **Un único Chromium** compartido, con un `BrowserContext` por cuenta, que se cierra tras el login.
-7. **Timeout duro de 90 s** por job.
+4. **Caché de sesión en memoria:** un Chrome logueado por `account.id` (y hash de las credenciales). En cada job se recarga la página; solo se hace login si no hay sesión o si Satrack devolvió al formulario de login.
+5. **Lectura del DOM con Selenium** (el crawler actual). Si más adelante se identifica el endpoint JSON de la web de Satrack, las posiciones pasan a pedirse por HTTP con las cookies de la sesión, sin cambiar este contrato.
+6. **Máximo `MAX_SESSIONS` (3) navegadores** abiertos; se cierran tras `SESSION_IDLE_S` (15 min) sin uso.
+7. **Timeout duro de `JOB_TIMEOUT_S` (120 s)** por job; al vencerse se cierra el navegador de la cuenta. Es mayor que los 90 s originales porque Selenium espera hasta 60 s la lista de vehículos tras el login.
 8. **Evidencia en fallos.** Ante `PROVIDER_CHANGED` o `CAPTCHA_REQUIRED` se guarda un screenshot y el HTML en `/data/satrack/failures/` y se borran a los 7 días.
 9. **Nunca registrar contraseñas** en los logs. Las credenciales solo viven en memoria durante el job.
 10. Los `job_id` recibidos se recuerdan en memoria durante 1 h para responder `409` a duplicados.
@@ -162,29 +165,32 @@ Códigos de error:
 
 ```
 satrack-service/
-├── src/
-│   ├── server.ts            # Fastify, rutas, auth por API key
-│   ├── jobs.ts              # cola en memoria, mutex por cuenta, concurrencia, timeout
-│   ├── callback.ts          # POST al monolito con HMAC y reintentos
-│   ├── browser.ts           # Chromium compartido
-│   ├── sessions.ts          # caché de sesión por cuenta
-│   ├── providers/
-│   │   ├── types.ts         # interfaz Provider
-│   │   ├── satrack.ts       # login, fetchPositions, listVehicles, parse
-│   │   └── simulator.ts     # camión falso desde un GPX (desarrollo y demos)
-│   └── config.ts
-├── test/fixtures/           # respuestas reales de Satrack guardadas
-├── Dockerfile               # FROM mcr.microsoft.com/playwright:v1.x-noble
-└── package.json
+├── app/
+│   ├── main.py              # FastAPI: rutas, auth por API key, lifespan
+│   ├── config.py            # Settings (pydantic-settings)
+│   ├── schemas.py           # JobRequest, Position, Vehicle, CallbackPayload
+│   ├── errors.py            # ProviderError + códigos
+│   ├── jobs.py              # dedupe, lock por cuenta, concurrencia, timeout
+│   ├── callback.py          # POST al monolito con HMAC y reintentos
+│   ├── crawler.py           # crawler Selenium existente (refactorizado)
+│   └── providers/
+│       ├── base.py          # BaseProvider (ABC) + registro por nombre
+│       ├── satrack.py       # SessionPool + adaptador del crawler
+│       └── simulator.py     # flota falsa en rutas reales (desarrollo y demos)
+├── tests/
+├── Dockerfile               # python:3.12-slim + chromium + chromium-driver
+└── pyproject.toml
 ```
 
-```ts
-export interface Provider {
-  login(account: Account): Promise<Session>;
-  listVehicles(session: Session): Promise<Vehicle[]>;
-  fetchPositions(session: Session): Promise<Position[]>; // toda la flota de la cuenta
-}
+```python
+class BaseProvider(ABC):                                                # SatrackProvider, SimulatorProvider
+    @abstractmethod
+    def list_vehicles(self, account: Account) -> list[Vehicle]: ...
+    def fetch_positions(self, account: Account) -> list[Position]: ...  # plantilla: toda la flota de la cuenta, normalizada
+    def abort(self, account_id: str) -> None: ...                       # corta un job vencido
 ```
+
+Todo el sistema usa el mismo estilo orientado a clases (clase base abstracta + hijas por proveedor + registro por nombre); ver [backend/PLAN.md §4](backend/PLAN.md#4-arquitectura-orientada-a-clases).
 
 `PROVIDER=simulator` permite desarrollar el monitoreo completo sin credenciales de Satrack.
 
@@ -197,7 +203,12 @@ CALLBACK_URL=http://api:8000/internal/satrack/callback
 CALLBACK_SECRET=...
 PROVIDER=satrack            # satrack | simulator
 MAX_CONCURRENCY=3
-JOB_TIMEOUT_MS=90000
+JOB_TIMEOUT_S=120
+MAX_SESSIONS=3
+SESSION_IDLE_S=900
+HEADLESS=true
+CHROME_BINARY=/usr/bin/chromium        # en Docker; vacío = Selenium Manager
+CHROMEDRIVER_PATH=/usr/bin/chromedriver
 ```
 
 ### 2.9 docker compose (extracto)
@@ -368,6 +379,22 @@ Una falla técnica **no es** "sin señal" del vehículo y nunca debe disparar un
 | WA-03 | Todo mensaje entrante se asocia al viaje activo del conductor. Si no tiene viaje activo, va a la bandeja como "sin viaje" |
 | WA-04 | Se usa un número dedicado por operación (riesgo de baneo de OpenWA) |
 | WA-05 (propuesta) | Máximo `[1]` mensaje automático cada `[15 min]` al conductor, salvo en el cierre del viaje |
+
+#### Instalación de OpenWA (desarrollo)
+
+OpenWA corre como servicio aparte desde su propio repositorio ([rmyndharis/OpenWA](https://github.com/rmyndharis/OpenWA)), fuera de este repo:
+
+```bash
+git clone https://github.com/rmyndharis/OpenWA.git
+cd OpenWA
+docker compose -f docker-compose.dev.yml up -d
+```
+
+La integración con el monolito (envío de mensajes, webhook de mensajes entrantes y reglas WA-01 a WA-05) está planificada para la semana 5 (§5) y no forma parte del MVP inicial. Al implementarla hay que definir:
+
+- Si OpenWA se agrega como servicio del `docker compose` principal o se sigue levantando desde su repo.
+- La URL interna y la autenticación entre el monolito y OpenWA, y la URL del webhook de mensajes entrantes.
+- El número dedicado (WA-04) y dónde se guarda la sesión de WhatsApp, para no tener que escanear el QR en cada reinicio.
 
 ### 4.8 Reportes a la transportadora
 
