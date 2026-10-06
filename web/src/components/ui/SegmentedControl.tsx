@@ -1,7 +1,7 @@
 import { useRef, type KeyboardEvent } from 'react'
 import { cn } from '../../lib/cn'
 
-export type SegmentedOption = string | { value: string; label: string }
+export type SegmentedOption = string | { value: string; label: string; /** Nombre accesible si la etiqueta visible es una sigla ('ES'). */ ariaLabel?: string }
 
 export interface SegmentedControlProps {
   /** Strings o pares { value, label }. */
@@ -11,6 +11,8 @@ export interface SegmentedControlProps {
   onChange?: (value: string) => void
   /** Estira los segmentos al ancho de la fila. @default false */
   block?: boolean
+  /** Versión compacta (px-3 py-2, 13px) para barras y encabezados. @default false */
+  compact?: boolean
   /** Nombre accesible del grupo (recomendado). */
   'aria-label'?: string
   className?: string
@@ -20,7 +22,7 @@ export interface SegmentedControlProps {
  * Selector segmentado: pista cloud-soft, segmento activo en ink con texto paper.
  * role="tablist" con navegación por flechas, Inicio y Fin.
  */
-export function SegmentedControl({ options, value, onChange, block = false, className, ...props }: SegmentedControlProps) {
+export function SegmentedControl({ options, value, onChange, block = false, compact = false, className, ...props }: SegmentedControlProps) {
   const items = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o))
   const refs = useRef<Array<HTMLButtonElement | null>>([])
   const activeIndex = Math.max(0, items.findIndex((o) => o.value === value))
@@ -57,10 +59,12 @@ export function SegmentedControl({ options, value, onChange, block = false, clas
             type="button"
             role="tab"
             aria-selected={active}
+            aria-label={'ariaLabel' in item ? item.ariaLabel : undefined}
             tabIndex={index === activeIndex ? 0 : -1}
             onClick={onChange ? () => onChange(item.value) : undefined}
             className={cn(
-              'cursor-pointer rounded-chip border-0 px-4 py-2 text-base font-medium outline-hidden transition-all duration-300 ease-out focus-ring',
+              'cursor-pointer rounded-chip border-0 font-medium outline-hidden transition-all duration-300 ease-out focus-ring',
+              compact ? 'px-3 py-2 text-sm' : 'px-4 py-2 text-base',
               block && 'flex-1',
               active ? 'bg-ink text-paper shadow-xs' : 'bg-transparent text-mist hover:text-ink',
             )}

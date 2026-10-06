@@ -1,5 +1,9 @@
 # Rumboo
 
+## Sitio público
+
+La landing de marketing vive en [landing-page/](landing-page/README.md). Para verla: `npm --prefix landing-page run dev` y abre http://127.0.0.1:4173.
+
 - [Tesis de negocio y diferenciación](TESIS.md)
 - [Idea y alcance del MVP](IDEA.md)
 - [Diseño técnico de implementación](IMPLEMENTACION.md)

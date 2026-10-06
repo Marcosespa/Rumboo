@@ -24,7 +24,7 @@ export const en: Messages = {
     },
   },
   nav: {
-    panel: 'Dashboard',
+    panel: 'Home',
     trips: 'Trips',
     newTrip: 'New',
     fleet: 'Fleet',
@@ -83,13 +83,13 @@ export const en: Messages = {
     notFound: {
       title: "We couldn't find this page",
       text: 'The link may be mistyped or the page no longer exists.',
-      action: 'Back to dashboard',
+      action: 'Back to home',
     },
   },
   placeholder: {
     underConstruction: 'Screen under construction.',
     login: { title: 'Sign in to your operation' },
-    panel: { title: 'Dashboard', subtitle: "Here you'll see how your operation is going right now." },
+    panel: { title: 'Home', subtitle: "Here you'll see how your operation is going right now." },
     trips: { title: 'Trips', subtitle: "Here you'll see your trips and where each one stands." },
     newTrip: { title: 'New trip', subtitle: "Here you'll register a new trip." },
     tripDetail: { title: 'Trip details', subtitle: "Here you'll see where this truck is." },

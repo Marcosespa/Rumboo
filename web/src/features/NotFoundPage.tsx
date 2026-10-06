@@ -1,11 +1,7 @@
 import { ButtonLink, PageHeader } from '../components/ui'
+import { useI18n } from '../i18n'
 
 export function NotFoundPage() {
-  return (
-    <PageHeader
-      title="No encontramos esta página"
-      subtitle="Puede que el enlace esté mal escrito o que la página ya no exista."
-      action={<ButtonLink to="/">Volver al panel</ButtonLink>}
-    />
-  )
+  const { t } = useI18n()
+  return <PageHeader title={t('errors.notFound.title')} subtitle={t('errors.notFound.text')} action={<ButtonLink to="/">{t('errors.notFound.action')}</ButtonLink>} />
 }

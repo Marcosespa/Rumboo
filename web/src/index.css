@@ -1,5 +1,8 @@
+/* Orden de capas: app.css (estilos globales heredados) queda ENTRE base y components, así gana a
+   preflight pero pierde ante las utilidades de Tailwind y los componentes de src/components/ui. */
+@layer theme, base, legacy, components, utilities;
 @import "tailwindcss";
-@import "./app.css";
+@import "./app.css" layer(legacy);
 
 /* ─────────────────────────────────────────────────────────────
    Rumbo — design tokens (marca "Rumbo", skill liquida-design)

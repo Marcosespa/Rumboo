@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useI18n } from '../../i18n'
 import { cn } from '../../lib/cn'
 import { NAV_ITEMS } from './navItems'
 
@@ -8,13 +9,14 @@ import { NAV_ITEMS } from './navItems'
  * las cinco etiquetas quepan sin truncarse.
  */
 export function BottomNav() {
+  const { t } = useI18n()
   return (
     <nav
-      aria-label="Navegación móvil"
+      aria-label={t('nav.mobileLabel')}
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+14px)] nav:hidden"
     >
       <div className="pointer-events-auto flex w-full max-w-(--content-max) items-center justify-between gap-1 rounded-card border border-line/80 bg-paper/95 px-3 py-2 shadow-nav backdrop-blur-xl">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        {NAV_ITEMS.map(({ to, labelKey, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -27,7 +29,7 @@ export function BottomNav() {
             }
           >
             <Icon size={16} aria-hidden="true" />
-            <span className="max-w-full truncate">{label}</span>
+            <span className="max-w-full truncate">{t(labelKey)}</span>
           </NavLink>
         ))}
       </div>
