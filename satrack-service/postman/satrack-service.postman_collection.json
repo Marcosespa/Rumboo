@@ -2,7 +2,7 @@
   "info": {
     "name": "Rumboo · satrack-service",
     "_postman_id": "6b1d6c0e-3a63-4d8e-9f4b-2f5c1a7e0b11",
-    "description": "Consulta los vehículos y las posiciones de una cuenta Satrack a través del microservicio.\n\nUso:\n1. Importa esta colección y el environment `satrack-local.postman_environment.json`.\n2. En el environment completa `apiKey` (SATRACK_SERVICE_API_KEY del .env), `satrackUsername` y `satrackPassword`.\n3. Ejecuta la carpeta \"Flujo completo\" con el Collection Runner, o las peticiones en orden. Las peticiones de resultado se repiten solas en el Runner hasta que el job termina; a mano, vuelve a enviarlas hasta ver `status: done`.\n4. Abre la pestaña **Visualize** de las peticiones de resultado para ver la tabla de vehículos y posiciones.\n\nEl servicio responde 202 y procesa en segundo plano; con Satrack real el primer job tarda 30–90 s (login con Chrome). Los siguientes reutilizan la sesión.",
+    "description": "Consulta los vehículos y las posiciones de una cuenta Satrack a través del microservicio.\n\nUso:\n1. Importa esta colección y el environment `satrack-local.postman_environment.json`.\n2. En el environment completa `apiKey` (SATRACK_SERVICE_API_KEY del .env), `satrackUsername` y `satrackPassword`.\n3. Ejecuta la carpeta \"Flujo completo\" con el Collection Runner, o las peticiones en orden. Las peticiones de resultado se repiten solas en el Runner hasta que el job termina; a mano, vuelve a enviarlas hasta ver `status: done`.\n4. Abre la pestaña **Visualize** de las peticiones de resultado para ver la tabla de vehículos y posiciones.\n\nEl servicio responde 202 y procesa en segundo plano; con Satrack real el primer job tarda 30–90 s (login con Chrome). Los siguientes reutilizan la sesión.\n\nLos scripts aceptan accountJson generado desde variables o un objeto account escrito en el body. El error de configuración identifica las variables que faltan; el job_id se toma de la respuesta real para consultar el resultado.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -112,14 +112,31 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const username = pm.environment.get('satrackUsername');",
-                  "const password = pm.environment.get('satrackPassword');",
-                  "if (!username || !password || !pm.environment.get('apiKey')) throw new Error('Completa las credenciales y apiKey del environment local.');",
-                  "pm.variables.set('accountJson', JSON.stringify({id: pm.environment.get('accountId'), username, password}));",
-                  "if (!pm.environment.get('satrackUsername') || !pm.environment.get('satrackPassword')) {",
-                  "  throw new Error('Completa satrackUsername y satrackPassword en el environment.');",
+                  "const rawBody = pm.request.body.raw || '';",
+                  "const isSet = value => value !== undefined && value !== null && String(value).trim() !== '';",
+                  "const missing = [];",
+                  "const headerKey = pm.variables.replaceIn(pm.request.headers.get('X-Api-Key') || '');",
+                  "if (!isSet(pm.variables.get('apiKey')) && (!isSet(headerKey) || headerKey.includes('{{'))) missing.push('apiKey');",
+                  "const usesAccountJson = rawBody.includes('{{accountJson}}');",
+                  "if (usesAccountJson) {",
+                  "  for (const name of ['satrackUsername', 'satrackPassword']) {",
+                  "    if (!isSet(pm.variables.get(name))) missing.push(name);",
+                  "  }",
+                  "}",
+                  "for (const match of rawBody.matchAll(/{{\\s*([^{}]+?)\\s*}}/g)) {",
+                  "  const name = match[1];",
+                  "  if (name.startsWith('$') || name === 'vehiclesJobId' || (name === 'accountJson' && usesAccountJson)) continue;",
+                  "  if (!isSet(pm.variables.get(name))) missing.push(name);",
+                  "}",
+                  "if (missing.length) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "  throw new Error('Faltan variables: ' + [...new Set(missing)].join(', ') + '. Selecciona el environment local configurado o completa sus valores locales.');",
+                  "}",
+                  "if (usesAccountJson) {",
+                  "  pm.variables.set('accountJson', JSON.stringify({id: pm.variables.get('accountId') || 'satrack-local', username: pm.variables.get('satrackUsername'), password: pm.variables.get('satrackPassword')}));",
                   "}",
                   "pm.collectionVariables.set('vehiclesJobId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('vehiclesJobId', pm.collectionVariables.get('vehiclesJobId'));",
                   "pm.collectionVariables.set('pollAttempts', '0');"
                 ]
               }
@@ -130,7 +147,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Job aceptado (202)', () => pm.response.to.have.status(202));",
-                  "if (pm.response.code !== 202) pm.execution.setNextRequest(null);"
+                  "if (pm.response.code === 202) {",
+                  "  const jobId = pm.response.json().job_id;",
+                  "  pm.collectionVariables.set('vehiclesJobId', jobId);",
+                  "  pm.variables.set('vehiclesJobId', jobId);",
+                  "} else {",
+                  "  pm.execution.setNextRequest(null);",
+                  "}"
                 ]
               }
             }
@@ -151,7 +174,7 @@
                 "{{vehiclesJobId}}"
               ]
             },
-            "description": "Estado queued → running → done. result.vehicles devuelve placa, alias, ubicación, velocidad, estado y fecha disponibles. Guarda las placas en platesJson para la siguiente consulta."
+            "description": "Consulta el mismo job hasta ver status: done. queued/running con result: null significa que aún está en proceso. Send hace una sola consulta: repítela cada 3 segundos o ejecuta Flujo completo con el Collection Runner. Al terminar, result.vehicles[].address contiene la dirección y cada objeto incluye coordenadas, velocidad, estado y reporte disponibles. Guarda las placas en platesJson para la siguiente consulta."
           },
           "event": [
             {
@@ -163,6 +186,7 @@
                   "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); return; }",
                   "const job = pm.response.json();",
                   "if (job.status !== 'done') {",
+                  "  pm.visualizer.set(`<h3>Consulta en proceso · {{status}}</h3><p>Job: {{job_id}}</p><p>El resultado todavía no está disponible. Con Send, vuelve a enviar este mismo GET cada 3 segundos hasta ver status: done. El Collection Runner repite la consulta automáticamente.</p><p>Al terminar, la dirección estará en result.vehicles[].address.</p>`, job);",
                   "  const attempts = Number(pm.collectionVariables.get('pollAttempts')) + 1;",
                   "  pm.collectionVariables.set('pollAttempts', String(attempts));",
                   "  console.log(`Job ${job.status}; reintento ${attempts}`);",
@@ -182,8 +206,8 @@
                   "<style>body{font-family:sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;text-align:left}th{background:#1a4f8b;color:#fff}.err{color:#d8432f}</style>",
                   "<h3>{{count}} vehículos · estado {{status}}</h3>",
                   "{{#each errors}}<p class='err'>{{code}}: {{message}}</p>{{/each}}",
-                  "<table><tr><th>Placa</th><th>Alias en Satrack</th><th>Estado</th><th>Dirección</th><th>Lat, Lng</th><th>Último reporte (texto Satrack)</th><th>Id dispositivo</th><th>Estado</th><th>Dirección</th><th>Latitud</th><th>Longitud</th><th>km/h</th><th>Reporte UTC</th></tr>",
-                  "{{#each vehicles}}<tr><td>{{plate}}</td><td>{{name}}</td><td>{{status}}</td><td>{{address}}</td><td>{{#if lat}}{{lat}}, {{lng}}{{else}}sin coordenadas{{/if}}</td><td>{{reported_at_raw}}</td><td>{{device_id}}</td><td>{{status}}</td><td>{{address}}</td><td>{{lat}}</td><td>{{lng}}</td><td>{{speed_kmh}}</td><td>{{reported_at}}</td></tr>{{/each}}</table>`,",
+                  "<table><tr><th>Placa</th><th>Alias en Satrack</th><th>Dirección</th><th>Latitud</th><th>Longitud</th><th>km/h</th><th>Estado</th><th>Reporte UTC</th><th>Último reporte (texto Satrack)</th><th>Id dispositivo</th></tr>",
+                  "{{#each vehicles}}<tr><td>{{plate}}</td><td>{{name}}</td><td>{{address}}</td><td>{{lat}}</td><td>{{lng}}</td><td>{{speed_kmh}}</td><td>{{status}}</td><td>{{reported_at}}</td><td>{{reported_at_raw}}</td><td>{{device_id}}</td></tr>{{/each}}</table>`,",
                   "  { count: result.vehicles.length, status: result.status, vehicles: result.vehicles, errors: result.errors });"
                 ]
               }
@@ -222,11 +246,31 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const username = pm.environment.get('satrackUsername');",
-                  "const password = pm.environment.get('satrackPassword');",
-                  "if (!username || !password || !pm.environment.get('apiKey')) throw new Error('Completa las credenciales y apiKey del environment local.');",
-                  "pm.variables.set('accountJson', JSON.stringify({id: pm.environment.get('accountId'), username, password}));",
+                  "const rawBody = pm.request.body.raw || '';",
+                  "const isSet = value => value !== undefined && value !== null && String(value).trim() !== '';",
+                  "const missing = [];",
+                  "const headerKey = pm.variables.replaceIn(pm.request.headers.get('X-Api-Key') || '');",
+                  "if (!isSet(pm.variables.get('apiKey')) && (!isSet(headerKey) || headerKey.includes('{{'))) missing.push('apiKey');",
+                  "const usesAccountJson = rawBody.includes('{{accountJson}}');",
+                  "if (usesAccountJson) {",
+                  "  for (const name of ['satrackUsername', 'satrackPassword']) {",
+                  "    if (!isSet(pm.variables.get(name))) missing.push(name);",
+                  "  }",
+                  "}",
+                  "for (const match of rawBody.matchAll(/{{\\s*([^{}]+?)\\s*}}/g)) {",
+                  "  const name = match[1];",
+                  "  if (name.startsWith('$') || name === 'positionsJobId' || (name === 'accountJson' && usesAccountJson)) continue;",
+                  "  if (!isSet(pm.variables.get(name))) missing.push(name);",
+                  "}",
+                  "if (missing.length) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "  throw new Error('Faltan variables: ' + [...new Set(missing)].join(', ') + '. Selecciona el environment local configurado o completa sus valores locales.');",
+                  "}",
+                  "if (usesAccountJson) {",
+                  "  pm.variables.set('accountJson', JSON.stringify({id: pm.variables.get('accountId') || 'satrack-local', username: pm.variables.get('satrackUsername'), password: pm.variables.get('satrackPassword')}));",
+                  "}",
                   "pm.collectionVariables.set('positionsJobId', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set('positionsJobId', pm.collectionVariables.get('positionsJobId'));",
                   "pm.collectionVariables.set('pollAttempts', '0');"
                 ]
               }
@@ -237,7 +281,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Job aceptado (202)', () => pm.response.to.have.status(202));",
-                  "if (pm.response.code !== 202) pm.execution.setNextRequest(null);"
+                  "if (pm.response.code === 202) {",
+                  "  const jobId = pm.response.json().job_id;",
+                  "  pm.collectionVariables.set('positionsJobId', jobId);",
+                  "  pm.variables.set('positionsJobId', jobId);",
+                  "} else {",
+                  "  pm.execution.setNextRequest(null);",
+                  "}"
                 ]
               }
             }
@@ -258,7 +308,7 @@
                 "{{positionsJobId}}"
               ]
             },
-            "description": "Posición, dirección, estado y hora del último reporte por placa. `VEHICLE_NOT_FOUND` si la placa no está en la cuenta; `POSITION_UNAVAILABLE` si Satrack no expone coordenadas."
+            "description": "Consulta el mismo job hasta ver status: done. queued/running con result: null significa que aún está en proceso. Send hace una sola consulta: repítela cada 3 segundos o usa el Collection Runner. Al terminar, result.positions[].address contiene la dirección; cada objeto incluye posición, velocidad, estado y hora del último reporte. VEHICLE_NOT_FOUND si la placa no está en la cuenta; POSITION_UNAVAILABLE si Satrack no expone coordenadas."
           },
           "event": [
             {
@@ -270,6 +320,7 @@
                   "if (pm.response.code !== 200) { pm.execution.setNextRequest(null); return; }",
                   "const job = pm.response.json();",
                   "if (job.status !== 'done') {",
+                  "  pm.visualizer.set(`<h3>Consulta en proceso · {{status}}</h3><p>Job: {{job_id}}</p><p>El resultado todavía no está disponible. Con Send, vuelve a enviar este mismo GET cada 3 segundos hasta ver status: done. El Collection Runner repite la consulta automáticamente.</p><p>Al terminar, la dirección estará en result.positions[].address.</p>`, job);",
                   "  const attempts = Number(pm.collectionVariables.get('pollAttempts')) + 1;",
                   "  pm.collectionVariables.set('pollAttempts', String(attempts));",
                   "  console.log(`Job ${job.status}; reintento ${attempts}`);",

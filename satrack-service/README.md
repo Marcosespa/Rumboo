@@ -21,7 +21,9 @@ Para ejecutar sin Docker, instala Chrome/Chromium y usa `uv run uvicorn app.main
 1. Importa [la colección](postman/satrack-service.postman_collection.json) y el environment privado `postman/satrack-real.local.postman_environment.json` generado por el script.
 2. Selecciona ese environment. Completa `satrackUsername` y `satrackPassword` como valores locales; `apiKey` y `baseUrl` ya están preparados.
 3. Ejecuta la carpeta **Flujo completo** con el Collection Runner. Crea el job de vehículos, consulta su resultado y después pide las posiciones de las placas encontradas. El polling espera tres segundos entre consultas y se detiene tras 60 intentos o un error.
-4. En **Visualize**, los resultados muestran la tabla de vehículos o posiciones: placa, alias, dirección, coordenadas, velocidad, estado y reporte. Si envías las peticiones manualmente, repite la consulta de resultado hasta ver `status: done`.
+4. En **Visualize**, los resultados muestran la tabla de vehículos o posiciones: placa, alias, dirección, coordenadas, velocidad, estado y reporte. Si envías las peticiones manualmente con **Send**, cada envío hace una sola consulta: repite el mismo GET cada tres segundos hasta ver `status: done`. `queued` o `running` con `result: null` significa que el trabajo aún no ha terminado; Visualize indica que está en proceso. La dirección está en `result.vehicles[].address` para `vehicles` y en `result.positions[].address` para `positions`.
+
+Si aparece **«Faltan variables»**, importa y selecciona el environment privado del paso 1, o completa los valores locales que indica el mensaje. Pegar el JSON del body no selecciona un environment. Con el body original `accountJson`, los scripts necesitan `satrackUsername` y `satrackPassword`; con un objeto `account` escrito directamente en el body, solo se necesitan las variables que ese body utilice. `apiKey` se resuelve desde las variables activas o un header explícito `X-Api-Key`. El id devuelto por el POST se guarda para consultar el resultado, incluso si el body usa `{{$guid}}`.
 
 El environment compartible [satrack-local](postman/satrack-local.postman_environment.json) está vacío de credenciales. Los archivos `*.local.postman_environment.json`, `.env` y `data/` están excluidos de Git. El environment privado contiene secretos: úsalo localmente, sin compartirlo ni sincronizarlo en espacios compartidos.
 
@@ -50,9 +52,10 @@ Los resultados viven en memoria una hora después de terminar. `MAX_RETAINED_JOB
 
 ```sh
 uv run pytest -q
+node --test tests/test_postman.cjs
 uv run python scripts/check_live.py --environment postman/satrack-real.local.postman_environment.json
 ```
 
-La primera orden usa simulación y pruebas de contrato, errores, firma, concurrencia, timeout, retención y extracción. La segunda realiza solo consultas de lectura, valida vehículos/posiciones y guarda el resultado privado en `data/live-result.json`.
+La primera orden usa simulación y pruebas de contrato, errores, firma, concurrencia, timeout, retención y extracción. La segunda comprueba los scripts Postman con body manual o variables y los mensajes por configuración faltante. La tercera realiza solo consultas de lectura, valida vehículos/posiciones y guarda el resultado privado en `data/live-result.json`.
 
 `PROVIDER=simulator` permite desarrollar sin Satrack. La contraseña `invalida` produce `AUTH_FAILED` y `captcha` produce `CAPTCHA_REQUIRED`. El scraper real informa captcha/2FA cuando aparecen; requiere verificación manual. Ante cambios del portal conserva evidencia privada en `DATA_DIR/failures/` durante siete días.

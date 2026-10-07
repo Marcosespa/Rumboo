@@ -18,3 +18,4 @@ El alcance, los épicos, la arquitectura y los criterios de entrega se definen e
 - [Arranque independiente y colección Postman](satrack-service/README.md)
 - [Backend (API)](backend/PLAN.md)
 - [Plan de referencia del producto](docs/PLAN_WEB_PRODUCTO.md)
+- [Integraciones con TMS (futuro)](docs/INTEGRACIONES_TMS.md)

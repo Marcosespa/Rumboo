@@ -495,3 +495,4 @@ La integración con el monolito (envío de mensajes, webhook de mensajes entrant
 - [ ] Proveedor de telefonía y agente de voz
 - [ ] Canal principal de reportes
 - [ ] Validar con la transportadora piloto todas las reglas marcadas **(propuesta)**
+- [ ] Integración con TMS de las transportadoras (fuera del MVP): ver [docs/INTEGRACIONES_TMS.md](docs/INTEGRACIONES_TMS.md)
