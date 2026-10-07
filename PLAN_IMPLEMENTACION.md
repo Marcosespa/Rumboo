@@ -2,7 +2,7 @@
 
 > **Referencia histórica del primer entregable de monitoreo.** El [Plan maestro del MVP](backend/PLAN.md) es la fuente de verdad del proyecto; este documento no amplía ni reemplaza su alcance.
 
-Fecha: 5 de octubre de 2026. Este plan se escribe antes de implementar y complementa los planes de Claude en `satrack-service/PLAN.md`, `backend/PLAN.md` y `web/PLAN.md`.
+Fecha: 5 de octubre de 2026. Este plan se escribe antes de implementar y complementa los planes de Claude en `satrack-service/PLAN.md`, `backend/PLAN.md` y `docs/PLAN_WEB_PRODUCTO.md`.
 
 ## Alcance y decisiones
 

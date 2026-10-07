@@ -2,7 +2,7 @@
 
 ## Sitio público
 
-La landing de marketing vive en [landing-page/](landing-page/README.md). Para verla: `npm --prefix landing-page run dev` y abre http://127.0.0.1:4173.
+El único frontend del repositorio es la landing de marketing en [landing-page/](landing-page/README.md). Para verla: `npm --prefix landing-page run dev` y abre http://127.0.0.1:4173.
 
 - [Tesis de negocio y diferenciación](TESIS.md)
 - [Idea y alcance del MVP](IDEA.md)
@@ -17,4 +17,4 @@ El alcance, los épicos, la arquitectura y los criterios de entrega se definen e
 - [Microservicio del scraper (`satrack-service`)](satrack-service/PLAN.md)
 - [Arranque independiente y colección Postman](satrack-service/README.md)
 - [Backend (API)](backend/PLAN.md)
-- [Web (bandeja web)](web/PLAN.md)
+- [Plan de referencia del producto](docs/PLAN_WEB_PRODUCTO.md)

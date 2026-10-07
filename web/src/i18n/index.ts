@@ -1,8 +1,0 @@
-export { I18nProvider, useI18n } from './I18nProvider'
-export type { I18n } from './I18nProvider'
-export { translate, errorText, detectLang, LANGS, LOCALES, TIME_ZONE, LANG_STORAGE_KEY } from './translate'
-export type { Lang, MessageKey, TParams } from './translate'
-export { formatDate, formatAgo, formatWeightNumber } from './format'
-export { es } from './es'
-export { en } from './en'
-export type { Messages } from './es'

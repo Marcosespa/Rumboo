@@ -11,7 +11,7 @@
 |---|---|
 | Infraestructura | **Un solo servidor**, todo con `docker compose` |
 | Monolito | API FastAPI + scheduler + motor de reglas ([backend/PLAN.md](backend/PLAN.md)) |
-| Bandeja web | SPA React + Vite + Tailwind ([web/PLAN.md](web/PLAN.md)) |
+| Bandeja web | SPA React + Vite + Tailwind ([docs/PLAN_WEB_PRODUCTO.md](docs/PLAN_WEB_PRODUCTO.md)) |
 | Satrack | **Microservicio aparte en Python + FastAPI** (`satrack-service`) que envuelve el crawler Selenium existente ([satrack-service/PLAN.md](satrack-service/PLAN.md)) |
 | Comunicación monolito ↔ Satrack | **Request + callback HTTP**. Sin colas ni Redis |
 | Base de datos | Un Postgres  que **solo usa el monolito**. |

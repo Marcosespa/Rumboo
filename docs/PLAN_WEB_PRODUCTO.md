@@ -1,3 +1,5 @@
+> Plan de referencia de la aplicación del producto. El frontend de esa aplicación se retiró del repositorio; el sitio público actual está en [landing-page/](../landing-page/README.md).
+
 # Plan de implementación — Web (bandeja web Rumboo)
 
 > Bandeja web donde el coordinador de tráfico de la transportadora entra con usuario y contraseña, registra viajes y ve dónde va cada camión.

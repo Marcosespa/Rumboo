@@ -10,7 +10,7 @@ El servidor solo publica archivos estáticos. La página usa español por defect
 
 ## Publicación
 
-Ejecuta `npm run build`. Publica la carpeta `dist/` en un hosting estático. No necesitas instalar dependencias.
+Desde la raíz del repositorio, el build es `npm --prefix landing-page run build`. Dentro de esta carpeta también puedes ejecutar `npm run build`. Publica la carpeta `dist/` en un hosting estático. No necesitas instalar dependencias.
 
 ## Contacto
 
@@ -27,3 +27,12 @@ Fuentes, logo e iconos se sirven localmente; no se utilizan CDN, rastreadores ni
 ## Elementos conservados de la landing anterior
 
 Se adaptaron el contexto del trabajo manual entre herramientas, las preguntas sobre herramientas y Satrack, los metadatos Open Graph/Twitter bilingües y el cierre del menú al tocar fuera. Se mantuvo la identidad de esta versión. No se trasladaron correos ficticios, planes comerciales no validados, cifras legales ni simulaciones de la interfaz del producto.
+
+## Cloudflare Workers
+
+Usa la rama `main` y el directorio raíz `/`.
+
+- Build command: `npm --prefix landing-page run build`
+- Deploy command: `npx wrangler deploy --name rumboo --assets ./landing-page/dist --compatibility-date 2026-10-06`
+
+La única carpeta del frontend es `landing-page/`. Los archivos publicados salen de `landing-page/dist/`.
