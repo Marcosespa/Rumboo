@@ -1,8 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import update
+from cryptography.fernet import Fernet
+from sqlalchemy import select, update
 from app.satelital import servicio
-from app.satelital.models import ConsultaSatelital
+from app.satelital.models import ConsultaSatelital, CuentaSatelital
 from tests.ayudas import send_callback, trip_body
 
 ACCOUNT = {"usuario": "satrack-demo", "password": "clave-satrack"}
@@ -98,3 +99,13 @@ def test_scheduled_task_runs_without_the_http_layer(app, client, login, satrack)
         db.commit()
     asyncio.run(servicio.scheduled_queries(state.sessions, state.settings, satrack))
     assert len(satrack.jobs) == 2 and satrack.jobs[-1]["type"] == "vehicles"
+
+
+def test_rotating_the_encryption_key_keeps_credentials_readable(app, client, login, satrack, settings):
+    connect_account(client, login(), satrack)
+    new_key = Fernet.generate_key().decode()
+    rotated = settings.model_copy(update={"encryption_keys": new_key})
+    with app.state.sessions() as db:
+        assert servicio.reencrypt_accounts(db, rotated) == 1
+        stored = db.scalar(select(CuentaSatelital.password_cifrado))
+    assert Fernet(new_key).decrypt(stored.encode()) == b"clave-satrack"

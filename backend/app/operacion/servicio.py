@@ -8,18 +8,9 @@ from app.core.db import now
 from app.core.errores import Conflicto, Invalido, NoEncontrado
 from app.core.paginacion import paginar
 from app.operacion.models import ACTIVE_STATES, Conductor, Remesa, Vehiculo, Viaje
+from app.operacion.schemas import ConductorDTO, RemesaDTO, VehiculoDTO, ViajeDTO
 
-# Otros módulos agregan datos al vehículo serializado sin que operacion los conozca (ver registrar_datos_vehiculo).
-_vehicle_data = []
-
-
-def registrar_datos_vehiculo(provider):
-    """`provider(db, vehiculo) -> dict` se mezcla en cada vehículo serializado. Lo conecta app/main.py."""
-    if provider not in _vehicle_data:
-        _vehicle_data.append(provider)
-
-
-def get_trip(db, tenant, trip_id, lock=False):
+def _trip(db, tenant, trip_id, lock=False):
     query = select(Viaje).where(Viaje.id == trip_id, Viaje.transportadora_id == tenant)
     trip = db.scalar(query.with_for_update() if lock else query)
     if trip is None:
@@ -27,25 +18,18 @@ def get_trip(db, tenant, trip_id, lock=False):
     return trip
 
 
-def serialize_vehicle(db, v):
-    result = {"id": v.id, "placa": v.placa, "propietario": v.propietario, "en_satelital": v.en_satelital}
-    for provider in _vehicle_data:
-        result.update(provider(db, v))
-    return result
+def get_trip(db, tenant, trip_id):
+    return _trip_dto(db, _trip(db, tenant, trip_id), detail=True)
 
 
-def serialize_driver(d):
-    return {key: getattr(d, key) for key in ("id", "nombre", "cedula", "telefono", "autoriza_contacto")}
-
-
-def serialize_trip(db, trip, detail=False):
-    result = {key: getattr(trip, key) for key in ("id", "manifiesto", "origen", "destino", "estado", "salida_estimada", "llegada_estimada", "peso_salida_kg", "creado_en", "actualizado_en")}
-    result["conductor"] = serialize_driver(trip.conductor)
-    result["vehiculo"] = serialize_vehicle(db, trip.vehiculo)
-    if detail:
-        result["remesas"] = [{key: getattr(r, key) for key in ("id", "numero", "cliente", "peso_kg", "cantidad")} for r in trip.remesas]
-        result["eventos"] = eventos_de_viaje(db, trip.transportadora_id, trip.id)
-    return result
+def _trip_dto(db, trip, detail=False):
+    fields = {key: getattr(trip, key) for key in (
+        "id", "transportadora_id", "manifiesto", "origen", "destino", "estado", "salida_estimada",
+        "llegada_estimada", "peso_salida_kg", "creado_en", "actualizado_en")}
+    return ViajeDTO(**fields, conductor=ConductorDTO.model_validate(trip.conductor),
+                    vehiculo=VehiculoDTO.model_validate(trip.vehiculo),
+                    remesas=tuple(RemesaDTO.model_validate(r) for r in trip.remesas) if detail else (),
+                    eventos=tuple(eventos_de_viaje(db, trip.transportadora_id, trip.id)) if detail else ())
 
 
 def list_trips(db, tenant, state, text, page, page_size):
@@ -55,15 +39,15 @@ def list_trips(db, tenant, state, text, page, page_size):
     if text.strip():
         pattern = f"%{text.strip()[:100]}%"
         query = query.where(or_(Viaje.manifiesto.ilike(pattern), Vehiculo.placa.ilike(pattern), Conductor.nombre.ilike(pattern)))
-    return paginar(db, query.order_by(Viaje.id.desc()), page, page_size, lambda t: serialize_trip(db, t))
+    return paginar(db, query.order_by(Viaje.id.desc()), page, page_size, lambda t: _trip_dto(db, t))
 
 
 def list_vehicles(db, tenant):
-    return [serialize_vehicle(db, v) for v in db.scalars(select(Vehiculo).where(Vehiculo.transportadora_id == tenant).order_by(Vehiculo.placa))]
+    return [VehiculoDTO.model_validate(v) for v in db.scalars(select(Vehiculo).where(Vehiculo.transportadora_id == tenant).order_by(Vehiculo.placa))]
 
 
 def list_drivers(db, tenant):
-    return [serialize_driver(d) for d in db.scalars(select(Conductor).where(Conductor.transportadora_id == tenant).order_by(Conductor.nombre))]
+    return [ConductorDTO.model_validate(d) for d in db.scalars(select(Conductor).where(Conductor.transportadora_id == tenant).order_by(Conductor.nombre))]
 
 
 def create_trip(db, user, data):
@@ -105,11 +89,11 @@ def create_trip(db, user, data):
     except IntegrityError:
         db.rollback()
         raise Conflicto("El manifiesto, conductor o vehículo ya está asociado a otro viaje activo")
-    return trip
+    return _trip_dto(db, trip, detail=True)
 
 
 def transition(db, user, trip_id, data):
-    trip = get_trip(db, user.transportadora_id, trip_id, lock=True)
+    trip = _trip(db, user.transportadora_id, trip_id, lock=True)
     allowed = {"registrado": {"cancelado"}, "programado": {"en_ruta", "cancelado"}, "en_ruta": {"entregado", "cancelado"}}
     if data.estado not in allowed.get(trip.estado, set()):
         raise Conflicto("Ese cambio no está permitido desde el estado actual")
@@ -121,46 +105,56 @@ def transition(db, user, trip_id, data):
         trip.motivo_cancelacion = data.motivo.strip()
     registrar_evento(db, user.transportadora_id, trip.id, "estado_actualizado", {"anterior": previous, "estado": data.estado, "motivo": data.motivo.strip() or "Acción manual del operador"}, user.id)
     db.commit()
-    return trip
+    return _trip_dto(db, trip, detail=True)
 
 
 # --- API para otros módulos: la única forma de cambiar estas tablas desde fuera de operacion ---
 
 def get_vehicle(db, tenant, vehicle_id):
-    return db.scalar(select(Vehiculo).where(Vehiculo.id == vehicle_id, Vehiculo.transportadora_id == tenant))
+    vehicle = db.scalar(select(Vehiculo).where(Vehiculo.id == vehicle_id, Vehiculo.transportadora_id == tenant))
+    return VehiculoDTO.model_validate(vehicle) if vehicle else None
 
 
-def vehicle_by_plate(db, tenant, plate, lock=False):
-    query = select(Vehiculo).where(Vehiculo.transportadora_id == tenant, Vehiculo.placa == plate)
-    return db.scalar(query.with_for_update() if lock else query)
+def vehicle_by_plate(db, tenant, plate):
+    vehicle = db.scalar(select(Vehiculo).where(Vehiculo.transportadora_id == tenant, Vehiculo.placa == plate))
+    return VehiculoDTO.model_validate(vehicle) if vehicle else None
 
 
 def vehicles_of(db, tenant):
-    return list(db.scalars(select(Vehiculo).where(Vehiculo.transportadora_id == tenant)))
+    return list_vehicles(db, tenant)
 
 
-def set_in_satellite(vehicle, present):
-    vehicle.en_satelital = present
+def import_vehicle(db, tenant, plate):
+    """Importa identidad de la flota; satelital conserva alias, presencia y posición."""
+    vehicle = db.scalar(select(Vehiculo).where(Vehiculo.transportadora_id == tenant, Vehiculo.placa == plate))
+    if vehicle is None:
+        vehicle = Vehiculo(transportadora_id=tenant, placa=plate, propietario="")
+        db.add(vehicle)
+        db.flush()
+    return VehiculoDTO.model_validate(vehicle)
 
 
-def set_last_position(vehicle, position_id):
-    vehicle.ultima_posicion_id = position_id
-
-
-def reset_satellite_verification(db, tenant):
-    for vehicle in vehicles_of(db, tenant):
-        vehicle.en_satelital = None
-
-
-def schedule_verified_trips(db, tenant, vehicle):
-    """Una placa confirmada en el satelital pasa sus viajes `registrado` a `programado`."""
-    for trip in db.scalars(select(Viaje).where(Viaje.vehiculo_id == vehicle.id, Viaje.estado == "registrado").with_for_update()):
+def schedule_verified_trips(db, tenant, vehicle_id):
+    vehicle = get_vehicle(db, tenant, vehicle_id)
+    if vehicle is None:
+        raise NoEncontrado("No encontramos ese vehículo")
+    for trip in db.scalars(select(Viaje).where(Viaje.transportadora_id == tenant,
+            Viaje.vehiculo_id == vehicle_id, Viaje.estado == "registrado").with_for_update()):
         trip.estado = "programado"
         registrar_evento(db, tenant, trip.id, "placa_verificada", {"estado": "programado", "placa": vehicle.placa})
 
 
-def active_trip(db, vehicle_id):
-    return db.scalar(select(Viaje).where(Viaje.vehiculo_id == vehicle_id, Viaje.estado.in_(ACTIVE_STATES)))
+def active_trip(db, tenant, vehicle_id):
+    trip = db.scalar(select(Viaje).where(Viaje.transportadora_id == tenant, Viaje.vehiculo_id == vehicle_id,
+                                        Viaje.estado.in_(ACTIVE_STATES)))
+    return _trip_dto(db, trip) if trip else None
+
+
+def journey_snapshot(db, tenant, plates):
+    rows = db.execute(select(Vehiculo.placa, Viaje.id).join(Viaje, Viaje.vehiculo_id == Vehiculo.id).where(
+        Vehiculo.transportadora_id == tenant, Viaje.transportadora_id == tenant,
+        Vehiculo.placa.in_(plates), Viaje.estado.in_(ACTIVE_STATES)))
+    return dict(rows.all())
 
 
 def plates_to_monitor(db, tenant, at):
@@ -181,9 +175,7 @@ def trip_counts(db, tenant, delivered_since):
     return counts, delivered
 
 
-def vehicles_with_position(db, tenant):
-    return db.scalar(select(func.count(Vehiculo.id)).where(Vehiculo.transportadora_id == tenant, Vehiculo.ultima_posicion_id.is_not(None)))
-
-
 def active_trips(db, tenant, limit=10):
-    return list(db.scalars(select(Viaje).where(Viaje.transportadora_id == tenant, Viaje.estado.in_(ACTIVE_STATES)).order_by(Viaje.id.desc()).limit(limit)))
+    rows = db.scalars(select(Viaje).where(Viaje.transportadora_id == tenant, Viaje.estado.in_(ACTIVE_STATES))
+                      .order_by(Viaje.id.desc()).limit(limit))
+    return [_trip_dto(db, trip) for trip in rows]

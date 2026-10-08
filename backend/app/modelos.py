@@ -3,6 +3,7 @@
 Al crear un módulo con tablas, se agrega aquí su `models`.
 """
 from app.core.db import Base
+from app.core import models as core  # noqa: F401
 from app.acceso import models as acceso  # noqa: F401
 from app.auditoria import models as auditoria  # noqa: F401
 from app.operacion import models as operacion  # noqa: F401

@@ -13,6 +13,7 @@ from app.core.db import make_engine, now
 from app.core.seguridad import cipher
 from app.operacion.models import Conductor, Remesa, Vehiculo, Viaje
 from app.satelital.models import ConsultaSatelital, CuentaSatelital, Posicion
+from app.satelital.servicio import reencrypt_accounts
 
 
 def seed_demo(db, settings, user):
@@ -54,13 +55,16 @@ def seed_demo(db, settings, user):
 
 def main():
     parser = argparse.ArgumentParser(description="Usuarios y demo Rumboo")
-    parser.add_argument("command", choices=["bootstrap", "crear-usuario", "seed-demo"])
+    parser.add_argument("command", choices=["bootstrap", "crear-usuario", "seed-demo", "recifrar"])
     parser.add_argument("--transportadora", default="Transportes Demo")
     parser.add_argument("--usuario", default=None)
     args = parser.parse_args()
     settings = Settings()
     engine = make_engine(settings.database_url)
     with sessionmaker(engine, expire_on_commit=False)() as db:
+        if args.command == "recifrar":
+            print(f"{reencrypt_accounts(db, settings)} credenciales recifradas con la clave vigente")
+            return
         username = args.usuario or os.environ.get("BOOTSTRAP_USERNAME", "admin")
         password = os.environ.get("BOOTSTRAP_PASSWORD", "")
         if args.command == "bootstrap" and not password:

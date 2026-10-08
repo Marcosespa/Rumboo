@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.acceso.models import Usuario
+from app.acceso.schemas import UsuarioDTO
 from app.acceso.servicio import user_for_token
 from app.core.web import DB
 
@@ -17,4 +17,4 @@ def current_user(db: DB, credentials: Annotated[HTTPAuthorizationCredentials | N
     return user
 
 
-User = Annotated[Usuario, Depends(current_user)]
+User = Annotated[UsuarioDTO, Depends(current_user)]

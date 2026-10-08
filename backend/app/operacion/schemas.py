@@ -60,3 +60,44 @@ class ViajeInput(BaseModel):
 class TransitionInput(BaseModel):
     estado: Literal["programado", "en_ruta", "entregado", "cancelado"]
     motivo: str = Field(default="", max_length=1000)
+
+
+class ConductorDTO(BaseModel):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+    id: int
+    nombre: str
+    cedula: str
+    telefono: str
+    autoriza_contacto: bool
+
+
+class VehiculoDTO(BaseModel):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+    id: int
+    transportadora_id: int = Field(exclude=True)
+    placa: str
+    propietario: str
+
+
+class RemesaDTO(RemesaInput):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+    id: int
+
+
+class ViajeDTO(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    id: int
+    transportadora_id: int = Field(exclude=True)
+    manifiesto: str
+    origen: str
+    destino: str
+    estado: str
+    salida_estimada: datetime
+    llegada_estimada: datetime
+    peso_salida_kg: float
+    creado_en: datetime
+    actualizado_en: datetime
+    conductor: ConductorDTO
+    vehiculo: VehiculoDTO
+    remesas: tuple[RemesaDTO, ...] = ()
+    eventos: tuple[dict, ...] = ()

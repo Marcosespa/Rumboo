@@ -1,0 +1,16 @@
+# Lint compartido por backend/ y satrack-service/. scripts/verificar.sh lo aplica a los archivos cambiados,
+# así el código nuevo entra limpio sin bloquear por la deuda existente.
+target-version = "py312"
+line-length = 140
+
+[lint]
+# E/W/F estilo y errores, B bugs probables, S seguridad (bandit), UP modernización, SIM simplificación, PL pylint.
+select = ["E", "W", "F", "B", "S", "UP", "SIM", "PL"]
+ignore = [
+    "E501",     # longitud de línea: el código existente usa líneas largas de forma intencional
+    "PLR2004",  # números mágicos: umbrales de dominio legibles en contexto
+    "PLR0913",  # muchos argumentos: casos de uso con parámetros explícitos
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S107", "S603", "PLR0915"]

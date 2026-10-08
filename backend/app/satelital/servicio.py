@@ -54,6 +54,16 @@ def save_account(db, tenant, data, settings):
     return account
 
 
+def reencrypt_accounts(db, settings):
+    """Recifra las credenciales con la clave vigente; tras ejecutarlo se pueden retirar las claves antiguas."""
+    fernet = cipher(settings)
+    accounts = db.scalars(select(CuentaSatelital).with_for_update()).all()
+    for account in accounts:
+        account.password_cifrado = fernet.rotate(account.password_cifrado.encode()).decode()
+    db.commit()
+    return len(accounts)
+
+
 def reserve_job(db, account, settings, kind="vehicles", plates=None):
     account = db.scalar(select(CuentaSatelital).where(CuentaSatelital.id == account.id).with_for_update())
     pending = db.scalar(select(ConsultaSatelital).where(ConsultaSatelital.cuenta_satelital_id == account.id, ConsultaSatelital.estado == "pendiente"))

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import DateTime, Float, ForeignKey, Index, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.db import Base, now
 
@@ -32,6 +32,11 @@ class ConsultaSatelital(Base):
     estado: Mapped[str] = mapped_column(String(20), default="pendiente")
     error_codigo: Mapped[str | None] = mapped_column(String(60))
     error_detalle: Mapped[str | None] = mapped_column(Text)
+    resultado: Mapped[dict | None] = mapped_column(JSON)
+    viajes_solicitados: Mapped[dict] = mapped_column(JSON, default=dict)
+    intentos: Mapped[int] = mapped_column(default=0)
+    proximo_envio: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    fallo_contado: Mapped[bool] = mapped_column(default=False)
     __table_args__ = (Index("uq_consulta_pendiente", "cuenta_satelital_id", unique=True,
         postgresql_where=text("estado = 'pendiente'"), sqlite_where=text("estado = 'pendiente'")),)
 
@@ -52,3 +57,15 @@ class Posicion(Base):
     reportado_texto: Mapped[str] = mapped_column(String(250), default="")
     capturado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (UniqueConstraint("vehiculo_id", "reportado_en"), Index("ix_posiciones_viaje_fecha", "viaje_id", "capturado_en"))
+
+
+class VehiculoSatelital(Base):
+    __tablename__ = "vehiculos_satelitales"
+    vehiculo_id: Mapped[int] = mapped_column(ForeignKey("vehiculos.id"), primary_key=True)
+    transportadora_id: Mapped[int] = mapped_column(ForeignKey("transportadoras.id"), index=True)
+    cuenta_satelital_id: Mapped[int] = mapped_column(ForeignKey("cuentas_satelitales.id"))
+    cuenta_version: Mapped[int] = mapped_column(default=1)
+    alias: Mapped[str] = mapped_column(String(200), default="")
+    device_id: Mapped[str] = mapped_column(String(100), default="")
+    en_satelital: Mapped[bool | None] = mapped_column(Boolean)
+    ultima_posicion_id: Mapped[int | None] = mapped_column(ForeignKey("posiciones.id"))

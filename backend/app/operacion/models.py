@@ -24,8 +24,6 @@ class Vehiculo(Base):
     transportadora_id: Mapped[int] = mapped_column(ForeignKey("transportadoras.id"), index=True)
     placa: Mapped[str] = mapped_column(String(6))
     propietario: Mapped[str] = mapped_column(String(200), default="")
-    en_satelital: Mapped[bool | None] = mapped_column(Boolean)
-    ultima_posicion_id: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (UniqueConstraint("transportadora_id", "placa"),)
 
 

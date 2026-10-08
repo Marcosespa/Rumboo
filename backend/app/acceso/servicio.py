@@ -2,6 +2,7 @@ import secrets
 from datetime import timedelta
 from sqlalchemy import delete, select
 from app.acceso.models import Sesion, Transportadora, Usuario
+from app.acceso.schemas import TransportadoraDTO, UsuarioDTO
 from app.core.db import aware, now
 from app.core.errores import NoAutorizado
 from app.core.seguridad import hash_password, token_hash, verify_password
@@ -10,8 +11,12 @@ DUMMY_HASH = hash_password("invalid-login-placeholder")
 
 
 def user_info(user):
-    return {"id": user.id, "usuario": user.usuario, "nombre": user.nombre,
-            "transportadora": {"id": user.transportadora_id, "nombre": user.transportadora.nombre}}
+    return user.model_dump()
+
+
+def _user_dto(user):
+    return UsuarioDTO(id=user.id, usuario=user.usuario, nombre=user.nombre, transportadora_id=user.transportadora_id,
+                      transportadora=TransportadoraDTO(id=user.transportadora_id, nombre=user.transportadora.nombre))
 
 
 def authenticate(db, username, password, session_days):
@@ -20,7 +25,7 @@ def authenticate(db, username, password, session_days):
     if not user or not user.activo or not valid:
         raise NoAutorizado("Usuario o contraseña incorrectos")
     db.execute(delete(Sesion).where(Sesion.expira_en < now()))
-    return create_session(db, user, session_days), user
+    return create_session(db, user, session_days), _user_dto(user)
 
 
 def create_session(db, user, days):
@@ -34,7 +39,7 @@ def user_for_token(db, token):
     session = db.get(Sesion, token_hash(token))
     if session is None or aware(session.expira_en) <= now() or not session.usuario.activo:
         return None
-    return session.usuario
+    return _user_dto(session.usuario)
 
 
 def revoke_session(db, token):
@@ -45,7 +50,7 @@ def revoke_session(db, token):
 def create_user(db, name, username, password):
     existing = db.scalar(select(Usuario).where(Usuario.usuario == username))
     if existing:
-        return existing
+        return _user_dto(existing)
     carrier = db.scalar(select(Transportadora).where(Transportadora.nombre == name))
     if not carrier:
         carrier = Transportadora(nombre=name)
@@ -54,7 +59,7 @@ def create_user(db, name, username, password):
     user = Usuario(transportadora_id=carrier.id, usuario=username, nombre=username, password_hash=hash_password(password))
     db.add(user)
     db.commit()
-    return user
+    return _user_dto(user)
 
 
 def lock_carrier(db, tenant):

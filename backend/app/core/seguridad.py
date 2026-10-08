@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import bcrypt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 
 
 def hash_password(password):
@@ -22,4 +22,7 @@ def token_hash(token):
 
 
 def cipher(settings):
-    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode()).digest()))
+    """Cifra con la primera clave de ENCRYPTION_KEYS y descifra con cualquiera. La clave derivada de SECRET_KEY
+    queda al final solo para leer datos anteriores; `python -m app.cli recifrar` los migra a la clave vigente."""
+    legacy = Fernet(base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode()).digest()))
+    return MultiFernet([*(Fernet(key) for key in settings.encryption_key_list), legacy])
