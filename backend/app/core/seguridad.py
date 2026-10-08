@@ -1,11 +1,7 @@
 import base64
 import hashlib
-import secrets
-from datetime import timedelta
 import bcrypt
 from cryptography.fernet import Fernet
-from app.db import now
-from app.models import Sesion
 
 
 def hash_password(password):
@@ -23,13 +19,6 @@ def verify_password(password, password_hash):
 
 def token_hash(token):
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-def create_session(db, user, days):
-    token = secrets.token_urlsafe(32)
-    db.add(Sesion(token_hash=token_hash(token), usuario_id=user.id, expira_en=now() + timedelta(days=days)))
-    db.commit()
-    return token
 
 
 def cipher(settings):

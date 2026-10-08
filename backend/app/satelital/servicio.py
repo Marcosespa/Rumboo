@@ -1,12 +1,57 @@
+import asyncio
+import logging
 from datetime import timedelta
 from uuid import uuid4
-from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from app.db import now, aware
-from app.models import ACTIVE_STATES, ConsultaSatelital, CuentaSatelital, Posicion, Transportadora, Vehiculo, Viaje
-from app.security import cipher
-from app.services.viajes import event
+from app.acceso.servicio import query_frequency_min
+from app.auditoria.servicio import registrar_evento
+from app.core.db import aware, now
+from app.core.errores import Conflicto, Invalido, NoEncontrado
+from app.core.seguridad import cipher
+from app.operacion import servicio as operacion
+from app.satelital.cliente import ServicioSatelitalNoDisponible
+from app.satelital.models import ConsultaSatelital, CuentaSatelital, Posicion
+
+logger = logging.getLogger(__name__)
+
+
+def account_of(db, tenant, lock=False):
+    query = select(CuentaSatelital).where(CuentaSatelital.transportadora_id == tenant)
+    return db.scalar(query.with_for_update() if lock else query)
+
+
+def get_account(db, tenant):
+    account = account_of(db, tenant)
+    if not account:
+        raise Conflicto("Conecta tu cuenta de Satrack primero")
+    return account
+
+
+def account_info(db, account):
+    if not account:
+        return None
+    pending = db.scalar(select(ConsultaSatelital.job_id).where(ConsultaSatelital.cuenta_satelital_id == account.id, ConsultaSatelital.estado == "pendiente"))
+    return {"id": account.id, "usuario": account.usuario, "proveedor": account.proveedor, "estado": account.estado,
+            "fallos_consecutivos": account.fallos_consecutivos, "ultima_consulta_ok": account.ultima_consulta_ok,
+            "ultimo_error": account.ultimo_error, "backoff_hasta": account.backoff_hasta, "consulta_pendiente": bool(pending)}
+
+
+def save_account(db, tenant, data, settings):
+    account = account_of(db, tenant, lock=True)
+    if not account:
+        account = CuentaSatelital(transportadora_id=tenant, usuario=data.usuario.strip(), password_cifrado="")
+        db.add(account)
+    else:
+        account.version += 1
+        for pending in db.scalars(select(ConsultaSatelital).where(ConsultaSatelital.cuenta_satelital_id == account.id, ConsultaSatelital.estado == "pendiente").with_for_update()):
+            pending.estado = "cancelado"
+            pending.error_codigo = "STALE_ACCOUNT"
+    account.usuario = data.usuario.strip()
+    account.password_cifrado = cipher(settings).encrypt(data.password.get_secret_value().encode()).decode()
+    account.estado, account.fallos_consecutivos, account.ultimo_error, account.backoff_hasta = "sin_verificar", 0, None, None
+    operacion.reset_satellite_verification(db, tenant)
+    db.commit()
+    return account
 
 
 def reserve_job(db, account, settings, kind="vehicles", plates=None):
@@ -24,14 +69,30 @@ def reserve_job(db, account, settings, kind="vehicles", plates=None):
     return job
 
 
-def active_plates(db, tenant, at):
-    return list(db.scalars(select(Vehiculo.placa).join(Viaje, Viaje.vehiculo_id == Vehiculo.id).where(
-        Viaje.transportadora_id == tenant,
-        (Viaje.estado.in_(("en_ruta", "con_novedad"))) | ((Viaje.estado == "programado") & (Viaje.salida_estimada <= at + timedelta(hours=1)))
-    )).unique())
+async def dispatch(sessions, client, job):
+    if not job:
+        return
+    try:
+        await client.send_job(job)
+    except ServicioSatelitalNoDisponible:
+        with sessions() as db:
+            query = db.scalar(select(ConsultaSatelital).where(ConsultaSatelital.job_id == job["job_id"]).with_for_update())
+            if query and query.estado == "pendiente" and query.respondido_en is None:
+                query.estado = "fallido"
+                query.error_codigo = "SERVICE_UNAVAILABLE"
+                query.error_detalle = "El servicio satelital no está disponible; se reintentará"
+                account = db.get(CuentaSatelital, query.cuenta_satelital_id)
+                if account.version == query.cuenta_version:
+                    account.fallos_consecutivos += 1
+                    account.ultimo_error = query.error_detalle
+                    if account.fallos_consecutivos >= 3:
+                        account.estado = "falla"
+                db.commit()
+        logger.warning("Servicio satelital no disponible job=%s", job["job_id"])
 
 
-def tick(sessions, settings):
+def plan_queries(sessions, settings):
+    """Marca timeouts y reserva la siguiente consulta de cada cuenta según su frecuencia."""
     jobs = []
     at = now()
     with sessions() as db:
@@ -55,12 +116,10 @@ def tick(sessions, settings):
             if db.scalar(select(ConsultaSatelital.job_id).where(ConsultaSatelital.cuenta_satelital_id == account.id, ConsultaSatelital.estado == "pendiente")):
                 continue
             last = db.scalar(select(ConsultaSatelital).where(ConsultaSatelital.cuenta_satelital_id == account.id).order_by(ConsultaSatelital.enviado_en.desc()).limit(1))
-            carrier = db.get(Transportadora, account.transportadora_id)
-            if last and aware(last.enviado_en) > at - timedelta(minutes=carrier.frecuencia_consulta_min):
+            if last and aware(last.enviado_en) > at - timedelta(minutes=query_frequency_min(db, account.transportadora_id)):
                 continue
-            unverified = db.scalar(select(Viaje.id).where(Viaje.transportadora_id == account.transportadora_id, Viaje.estado == "registrado").limit(1))
-            plates = active_plates(db, account.transportadora_id, at)
-            if unverified or account.estado == "sin_verificar":
+            plates = operacion.plates_to_monitor(db, account.transportadora_id, at)
+            if operacion.has_unverified_trips(db, account.transportadora_id) or account.estado == "sin_verificar":
                 job = reserve_job(db, account, settings)
             elif plates:
                 job = reserve_job(db, account, settings, "positions", plates)
@@ -71,12 +130,19 @@ def tick(sessions, settings):
     return jobs
 
 
-def process_callback(db, payload):
+async def scheduled_queries(sessions, settings, client):
+    """Tarea periódica: el runner de core.tareas la ejecuta cada SCHEDULER_INTERVAL_S."""
+    for job in await asyncio.to_thread(plan_queries, sessions, settings):
+        await dispatch(sessions, client, job)
+
+
+def apply_result(db, payload):
+    """Aplica el resultado de un job de forma idempotente. Hoy llega por callback; en M1 también por GET."""
     query = db.scalar(select(ConsultaSatelital).where(ConsultaSatelital.job_id == str(payload.job_id)).with_for_update())
     if not query:
-        raise HTTPException(404, "Consulta no encontrada")
+        raise NoEncontrado("Consulta no encontrada")
     if query.tipo != payload.type:
-        raise HTTPException(422, "El tipo de respuesta no coincide con la consulta")
+        raise Invalido("El tipo de respuesta no coincide con la consulta")
     if query.respondido_en is not None:
         return {"status": "ok", "duplicado": True}
     account = db.scalar(select(CuentaSatelital).where(CuentaSatelital.id == query.cuenta_satelital_id).with_for_update())
@@ -96,23 +162,21 @@ def process_callback(db, payload):
     if payload.status != "failed":
         if payload.type == "vehicles" and not stale:
             plates = {v.plate for v in payload.vehicles}
-            for vehicle in db.scalars(select(Vehiculo).where(Vehiculo.transportadora_id == tenant)):
-                vehicle.en_satelital = vehicle.placa in plates
+            for vehicle in operacion.vehicles_of(db, tenant):
+                operacion.set_in_satellite(vehicle, vehicle.placa in plates)
                 if vehicle.en_satelital:
-                    for trip in db.scalars(select(Viaje).where(Viaje.vehiculo_id == vehicle.id, Viaje.estado == "registrado").with_for_update()):
-                        trip.estado = "programado"
-                        event(db, tenant, trip.id, "placa_verificada", {"estado": "programado", "placa": vehicle.placa})
+                    operacion.schedule_verified_trips(db, tenant, vehicle)
         if payload.type == "positions":
             for row in payload.positions:
                 if row.plate not in query.placas:
                     continue
-                vehicle = db.scalar(select(Vehiculo).where(Vehiculo.transportadora_id == tenant, Vehiculo.placa == row.plate).with_for_update())
+                vehicle = operacion.vehicle_by_plate(db, tenant, row.plate, lock=True)
                 if not vehicle:
                     continue
                 timestamp = aware(row.reported_at)
                 position = db.scalar(select(Posicion).where(Posicion.vehiculo_id == vehicle.id, Posicion.reportado_en == timestamp)) if timestamp else None
                 if position is None:
-                    trip = db.scalar(select(Viaje).where(Viaje.vehiculo_id == vehicle.id, Viaje.estado.in_(ACTIVE_STATES)))
+                    trip = operacion.active_trip(db, vehicle.id)
                     # Do not attach delayed coordinates from an earlier trip to the current trip.
                     trip_id = trip.id if trip and (timestamp is None or timestamp >= aware(trip.salida_estimada) - timedelta(hours=1)) else None
                     position = Posicion(transportadora_id=tenant, vehiculo_id=vehicle.id, viaje_id=trip_id, consulta_id=query.job_id,
@@ -123,8 +187,8 @@ def process_callback(db, payload):
                 previous = db.get(Posicion, vehicle.ultima_posicion_id) if vehicle.ultima_posicion_id else None
                 if previous is None or aware(position.reportado_en or position.capturado_en) >= aware(previous.reportado_en or previous.capturado_en):
                     if not stale:
-                        vehicle.ultima_posicion_id = position.id
-                        vehicle.en_satelital = True
+                        operacion.set_last_position(vehicle, position.id)
+                        operacion.set_in_satellite(vehicle, True)
     if not stale:
         if payload.status in ("ok", "partial"):
             account.estado = "ok"
@@ -148,11 +212,43 @@ def process_callback(db, payload):
                 account.estado = "falla"
         for error in payload.errors:
             if error.code == "VEHICLE_NOT_FOUND" and error.plate:
-                vehicle = db.scalar(select(Vehiculo).where(Vehiculo.transportadora_id == tenant, Vehiculo.placa == error.plate))
+                vehicle = operacion.vehicle_by_plate(db, tenant, error.plate)
                 if vehicle:
-                    vehicle.en_satelital = False
-                    trip = db.scalar(select(Viaje).where(Viaje.vehiculo_id == vehicle.id, Viaje.estado.in_(ACTIVE_STATES)))
-                    event(db, tenant, trip.id if trip else None, "placa_no_encontrada", {"placa": vehicle.placa})
-    event(db, tenant, None, "consulta_satelital", {"job_id": query.job_id, "estado": query.estado})
+                    operacion.set_in_satellite(vehicle, False)
+                    trip = operacion.active_trip(db, vehicle.id)
+                    registrar_evento(db, tenant, trip.id if trip else None, "placa_no_encontrada", {"placa": vehicle.placa})
+    registrar_evento(db, tenant, None, "consulta_satelital", {"job_id": query.job_id, "estado": query.estado})
     db.commit()
     return {"status": "ok"}
+
+
+def serialize_position(p):
+    if p is None:
+        return None
+    return {key: getattr(p, key) for key in ("id", "lat", "lng", "velocidad_kmh", "direccion", "estado_gps", "reportado_en", "reportado_texto", "capturado_en", "viaje_id")}
+
+
+def trip_positions(db, tenant, trip_id, limit):
+    operacion.get_trip(db, tenant, trip_id)
+    rows = list(db.scalars(select(Posicion).where(Posicion.viaje_id == trip_id, Posicion.transportadora_id == tenant).order_by(Posicion.capturado_en.desc(), Posicion.id.desc()).limit(limit)))
+    return [serialize_position(p) for p in reversed(rows)]
+
+
+def last_position(db, vehicle):
+    """Extensión de operacion: agrega la última ubicación al vehículo serializado."""
+    return {"ultima_posicion": serialize_position(db.get(Posicion, vehicle.ultima_posicion_id)) if vehicle.ultima_posicion_id else None}
+
+
+async def verify_plate_for_new_trip(sessions, settings, client, *, transportadora_id, viaje_id, vehiculo_id):
+    """Reacción a `viaje_registrado`: programa el viaje si la placa ya está confirmada; si no, pide verificarla."""
+    with sessions() as db:
+        account = account_of(db, transportadora_id)
+        if not account or account.estado == "credenciales_invalidas":
+            return
+        vehicle = operacion.get_vehicle(db, transportadora_id, vehiculo_id)
+        if account.estado == "ok" and vehicle and vehicle.en_satelital:
+            operacion.schedule_verified_trips(db, transportadora_id, vehicle)
+            db.commit()
+            return
+        job = reserve_job(db, account, settings)
+    await dispatch(sessions, client, job)

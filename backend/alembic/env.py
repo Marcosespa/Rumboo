@@ -1,12 +1,11 @@
 import os
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-from app.db import Base
-from app import models
+from app.modelos import metadata
 
 config = context.config
 config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL", "sqlite://").replace("%", "%%"))
-target_metadata = Base.metadata
+target_metadata = metadata
 
 if context.is_offline_mode():
     context.configure(url=config.get_main_option("sqlalchemy.url"), target_metadata=target_metadata, literal_binds=True, dialect_opts={"paramstyle": "named"})

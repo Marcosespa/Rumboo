@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
-from fastapi import Request
+from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
@@ -22,8 +21,3 @@ def make_engine(url):
         from sqlalchemy.pool import StaticPool
         kwargs.update(connect_args={"check_same_thread": False}, poolclass=StaticPool)
     return create_engine(url, **kwargs)
-
-
-def get_db(request: Request):
-    with request.app.state.sessions() as session:
-        yield session

@@ -5,25 +5,14 @@ from datetime import timedelta
 from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
-from app.config import Settings
-from app.db import make_engine, now
-from app.models import Conductor, ConsultaSatelital, CuentaSatelital, Evento, Posicion, Remesa, Transportadora, Usuario, Vehiculo, Viaje
-from app.security import cipher, hash_password
-
-
-def create_user(db, name, username, password):
-    existing = db.scalar(select(Usuario).where(Usuario.usuario == username))
-    if existing:
-        return existing
-    carrier = db.scalar(select(Transportadora).where(Transportadora.nombre == name))
-    if not carrier:
-        carrier = Transportadora(nombre=name)
-        db.add(carrier)
-        db.flush()
-    user = Usuario(transportadora_id=carrier.id, usuario=username, nombre=username, password_hash=hash_password(password))
-    db.add(user)
-    db.commit()
-    return user
+from app import modelos  # noqa: F401  (registra todas las tablas)
+from app.acceso.servicio import create_user
+from app.auditoria.models import Evento
+from app.core.config import Settings
+from app.core.db import make_engine, now
+from app.core.seguridad import cipher
+from app.operacion.models import Conductor, Remesa, Vehiculo, Viaje
+from app.satelital.models import ConsultaSatelital, CuentaSatelital, Posicion
 
 
 def seed_demo(db, settings, user):
