@@ -27,7 +27,8 @@ async def test_firma_hmac_y_reintentos_hasta_exito():
 
     assert len(calls) == 3
     request = calls[-1]
-    expected = hmac.new(settings.callback_secret.encode(), request.content, hashlib.sha256).hexdigest()
+    signed = f"{request.headers['X-Timestamp']}.".encode() + request.content
+    expected = hmac.new(settings.callback_secret.encode(), signed, hashlib.sha256).hexdigest()
     assert request.headers["X-Signature"] == f"sha256={expected}"
 
 

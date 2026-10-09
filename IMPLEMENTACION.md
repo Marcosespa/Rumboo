@@ -108,7 +108,8 @@ Responde `{"status":"ok","provider":"satrack","running_jobs":1,"queued_jobs":0,"
 El microservicio hace `POST` a la URL fija `CALLBACK_URL` (variable de entorno, nunca viene en la petición) con estos headers:
 
 - `X-Job-Id: <job_id>`
-- `X-Signature: sha256=<HMAC del body con CALLBACK_SECRET>`
+- `X-Timestamp: <Unix en segundos>`
+- `X-Signature: sha256=<HMAC de "{timestamp}.{body}" con CALLBACK_SECRET>` (ventana de 5 min)
 
 ```json
 {

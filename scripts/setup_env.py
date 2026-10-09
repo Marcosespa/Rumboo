@@ -1,10 +1,12 @@
 """Generate local demo configuration without disclosing secrets or replacing an existing file."""
+import base64
 import os
 from pathlib import Path
 import secrets
 
 target = Path(__file__).resolve().parents[1] / ".env"
 values = {"POSTGRES_PASSWORD": secrets.token_hex(24), "SECRET_KEY": secrets.token_hex(32),
+          "ENCRYPTION_KEYS": base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
           "SATRACK_SERVICE_API_KEY": secrets.token_hex(32), "CALLBACK_SECRET": secrets.token_hex(32),
           "BOOTSTRAP_PASSWORD": secrets.token_urlsafe(18)}
 template = target.with_name(".env.example").read_text()

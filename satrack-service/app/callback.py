@@ -2,23 +2,29 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import time
 import httpx
 from app.schemas import CallbackPayload
 
 logger = logging.getLogger(__name__)
 
 
+def signed_headers(payload, body, settings):
+    # La marca de tiempo entra en la firma para que el backend rechace callbacks repetidos fuera de su ventana.
+    timestamp = str(int(time.time()))
+    signature = hmac.new(settings.callback_secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
+    return {"Content-Type": "application/json", "X-Job-Id": str(payload.job_id),
+            "X-Timestamp": timestamp, "X-Signature": f"sha256={signature}"}
+
+
 async def send_callback(payload: CallbackPayload, settings, client=None, delays=(2, 10, 30)):
     body = payload.model_dump_json().encode()
-    signature = hmac.new(settings.callback_secret.encode(), body, hashlib.sha256).hexdigest()
-    headers = {"Content-Type": "application/json", "X-Job-Id": str(payload.job_id),
-               "X-Signature": f"sha256={signature}"}
     owned = client is None
     client = client or httpx.AsyncClient(timeout=5)
     try:
         for attempt in range(len(delays) + 1):
             try:
-                response = await client.post(settings.callback_url, content=body, headers=headers)
+                response = await client.post(settings.callback_url, content=body, headers=signed_headers(payload, body, settings))
                 response.raise_for_status()
                 return True
             except httpx.HTTPError:

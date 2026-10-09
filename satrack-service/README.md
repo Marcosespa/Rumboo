@@ -46,7 +46,7 @@ Un job `vehicles` devuelve la flota con los datos disponibles de la ficha del ma
 
 Los resultados viven en memoria una hora después de terminar. `MAX_RETAINED_JOBS=1000` limita esa retención, expulsando resultados terminados antiguos; sus UUID siguen deduplicados durante la hora. Un reinicio elimina jobs y sesiones. Respuestas: `401` API key inválida, `404` resultado ausente/vencido, `409` UUID repetido, `422` body inválido sin eco de credenciales, `503` cola/retención llena.
 
-`CALLBACK_URL` vacío desactiva el callback. Para integrar con el backend configura una URL fija y `CALLBACK_SECRET` de al menos 16 caracteres. La entrega conserva cuatro intentos con pausas 2/10/30 segundos y headers `X-Job-Id` y `X-Signature: sha256=...`; un fallo de entrega no elimina el resultado consultable. Usa una sola réplica/worker para preservar sesiones y consulta de resultados en memoria.
+`CALLBACK_URL` vacío desactiva el callback. Para integrar con el backend configura una URL fija y `CALLBACK_SECRET` de al menos 16 caracteres. La entrega conserva cuatro intentos con pausas 2/10/30 segundos y headers `X-Job-Id`, `X-Timestamp` y `X-Signature: sha256=HMAC("{timestamp}.{body}")`; el backend rechaza firmas con más de 5 min; un fallo de entrega no elimina el resultado consultable. Usa una sola réplica/worker para preservar sesiones y consulta de resultados en memoria.
 
 ## Pruebas
 

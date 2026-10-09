@@ -2,8 +2,7 @@
 
 > Arranque, contrato implementado y colección Postman: [README del servicio](README.md).
 
-> Microservicio que convierte el crawler de Satrack ([`crawler.py`](crawler.py), Selenium) en un servicio HTTP independiente.
-> El crawler se moverá a `app/crawler.py` al implementar. Implementa el contrato de [IMPLEMENTACION.md §2](../IMPLEMENTACION.md#2-microservicio-satrack-service).
+> Microservicio que expone el crawler de Satrack ([`app/crawler.py`](app/crawler.py), Selenium) como servicio HTTP independiente. Implementa el contrato de [IMPLEMENTACION.md §2](../IMPLEMENTACION.md#2-microservicio-satrack-service).
 >
 > **Referencia técnica subordinada al [Plan maestro del MVP](../backend/PLAN.md).** Ese documento gobierna alcance, contratos y decisiones; esta referencia conserva el diseño previo y no acredita el estado de la implementación.
 
@@ -114,7 +113,7 @@ Tipos: `positions` (última posición de cada placa pedida) y `vehicles` (todas 
 
 ### Callback al backend
 
-`POST {CALLBACK_URL}` (fija por variable de entorno, nunca viene en la petición) con headers `X-Job-Id` y `X-Signature: sha256=<HMAC-SHA256 del body con CALLBACK_SECRET>`.
+`POST {CALLBACK_URL}` (fija por variable de entorno, nunca viene en la petición) con headers `X-Job-Id`, `X-Timestamp` (Unix, s) y `X-Signature: sha256=<HMAC-SHA256 de "{timestamp}.{body}" con CALLBACK_SECRET>`. El backend rechaza marcas de tiempo con más de 5 min de diferencia (anti-repetición).
 
 ```json
 {
