@@ -31,7 +31,7 @@ class Runner:
         self.espera_lock_s = espera_lock_s
         self.check_lock_s = check_lock_s
         self.activo = False
-        self._estado = {t.nombre: {"ultimo_intento": None, "ultimo_exito": None, "error": None} for t in tareas}
+        self._estado = {t.nombre: {"ultimo_intento": None, "ultimo_exito": None, "error": None} for t in self.tareas}
         self._conexion = None
         self._mutex = threading.Lock()
 
@@ -44,7 +44,14 @@ class Runner:
         while True:
             children = []
             try:
-                if not await asyncio.to_thread(self._tomar_lock):
+                acquisition = asyncio.create_task(asyncio.to_thread(self._tomar_lock))
+                try:
+                    acquired = await asyncio.shield(acquisition)
+                except asyncio.CancelledError:
+                    # to_thread sigue ejecutándose: esperar evita adquirir el lock después de soltarlo.
+                    await acquisition
+                    raise
+                if not acquired:
                     await asyncio.sleep(self.espera_lock_s)
                     continue
                 self.activo = True

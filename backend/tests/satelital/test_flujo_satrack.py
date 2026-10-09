@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import UTC, datetime, timedelta
 from cryptography.fernet import Fernet
 from sqlalchemy import select, update
 from app.satelital import servicio
@@ -68,12 +69,12 @@ def test_positions_feed_history_and_last_location(client, login, satrack):
     positions_job = satrack.jobs[-1]
     assert positions_job["type"] == "positions" and positions_job["plates"] == ["ABC123"]
     row = {"plate": "ABC123", "lat": 6.13, "lng": -75.25, "speed_kmh": 35, "status": "En movimiento",
-           "address": "Vía El Retiro", "reported_at": datetime.now(timezone.utc).isoformat(), "reported_at_raw": "Hoy"}
+           "address": "Vía El Retiro", "reported_at": datetime.now(UTC).isoformat(), "reported_at_raw": "Hoy"}
     assert send_callback(client, positions_job["job_id"], "positions", positions=[row]).json() == {"status": "ok"}
     assert send_callback(client, positions_job["job_id"], "positions", positions=[row]).json()["duplicado"] is True
     history = client.get(f"/api/viajes/{trip['id']}/posiciones", headers=headers).json()
     assert len(history) == 1 and history[0]["direccion"] == "Vía El Retiro"
-    vehicle = client.get("/api/vehiculos", headers=headers).json()[0]
+    vehicle = client.get("/api/vehiculos", headers=headers).json()["items"][0]
     assert vehicle["ultima_posicion"]["lat"] == 6.13
 
 
@@ -82,11 +83,33 @@ def test_callback_with_invalid_signature_is_rejected(client, login, satrack):
     assert send_callback(client, job["job_id"], "vehicles", secret="otra-clave-cualquiera").status_code == 401
 
 
-def test_unavailable_service_counts_a_failure(client, login, satrack):
+def test_replayed_callback_outside_the_window_is_rejected(client, login, satrack):
+    _, job = connect_account(client, login(), satrack)
+    assert send_callback(client, job["job_id"], "vehicles", sent_at=time.time() - 600).status_code == 401
+
+
+def test_malformed_callback_headers_are_rejected_without_server_errors(client, login, satrack):
+    _, job = connect_account(client, login(), satrack)
+    now = str(int(time.time())).encode()
+    for timestamp, signature in ((b"\xb2", b"sha256=x"), (b"1" * 5000, b"sha256=x"), (now, b"sha256=\xf1")):
+        response = client.post("/internal/satrack/callback", content=b"{}",
+                               headers={"X-Timestamp": timestamp, "X-Signature": signature, "X-Job-Id": job["job_id"]})
+        assert response.status_code == 401
+
+
+def test_uncertain_post_stays_pending_until_timeout(app, client, login, satrack):
     satrack.available = False
     account = client.put("/api/cuenta-satelital", json=ACCOUNT, headers=login()).json()
-    assert account["fallos_consecutivos"] == 1
-    assert not account["consulta_pendiente"]
+    assert account["fallos_consecutivos"] == 0
+    assert account["consulta_pendiente"]
+    with app.state.sessions() as db:
+        db.execute(update(ConsultaSatelital).values(enviado_en=datetime.now(UTC) - timedelta(minutes=10)))
+        db.commit()
+    for _ in range(2):
+        asyncio.run(servicio.reconcile_queries(app.state.sessions, app.state.settings, satrack))
+    with app.state.sessions() as db:
+        assert db.scalar(select(CuentaSatelital.fallos_consecutivos)) == 1
+        assert db.scalar(select(ConsultaSatelital.estado)) == "timeout"
 
 
 def test_scheduled_task_runs_without_the_http_layer(app, client, login, satrack):
@@ -95,7 +118,7 @@ def test_scheduled_task_runs_without_the_http_layer(app, client, login, satrack)
     send_callback(client, job["job_id"], "vehicles", status="failed", errors=[{"code": "TIMEOUT", "message": "lento"}])
     state = app.state
     with state.sessions() as db:  # la consulta anterior ya superó la frecuencia de la transportadora (5 min)
-        db.execute(update(ConsultaSatelital).values(enviado_en=datetime.now(timezone.utc) - timedelta(minutes=10)))
+        db.execute(update(ConsultaSatelital).values(enviado_en=datetime.now(UTC) - timedelta(minutes=10)))
         db.commit()
     asyncio.run(servicio.scheduled_queries(state.sessions, state.settings, satrack))
     assert len(satrack.jobs) == 2 and satrack.jobs[-1]["type"] == "vehicles"

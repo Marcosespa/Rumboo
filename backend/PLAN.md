@@ -2,7 +2,7 @@
 
 **Fuente de verdad del proyecto · Versión 1 · 6 de octubre de 2026**
 
-**Estado: organización de los cinco componentes con runner interno en el backend (§3); funcionalidades pendientes por hito.** El microservicio Satrack queda fuera de los cambios: se integra mediante su contrato HTTP existente. El código existente es trabajo en curso y no acredita que un épico esté terminado.
+**Estado: arquitectura aplicada al núcleo: DTO, composición por instancia, estado satelital separado y runner con trabajo persistido (§3). Funcionalidades restantes por hito.** El microservicio Satrack queda fuera de los cambios: se integra mediante su contrato HTTP existente. El código existente es trabajo en curso y no acredita que un épico esté terminado.
 
 ## 1. Objetivo, alcance y autoridad
 
@@ -102,7 +102,7 @@ Cada módulo contiene sus propios `models.py`, `schemas.py`, `servicio.py` y `ro
 5. **El negocio no depende de HTTP.** Los servicios utilizan errores de dominio y los routers los traducen a respuestas HTTP. `voz-service` utiliza la API del backend para solicitar acciones de negocio.
 6. **Las fronteras se prueban.** Import-linter, pruebas de contratos, aislamiento por transportadora y casos de uso con clientes externos falsos.
 
-**Fronteras pendientes del código:** sustituir retornos ORM por DTO y registros globales por composición explícita; mover `vehiculos.en_satelital` y `vehiculos.ultima_posicion_id` a `VehiculoSatelital`. Completar el seguimiento automático, la persistencia de acciones y su recuperación será un trabajo por hito después de esta organización.
+**Fronteras aplicadas:** servicios públicos con DTO, composición por instancia en `app/consultas.py`, estado propio en `VehiculoSatelital` y eventos internos persistidos en `EntregaPendiente`. Runner con reconciliación, recuperación y control de liderazgo. La migración `847a65cf24dd` traslada la presencia/última posición existente. Los envíos OpenWA y acciones de voz siguen pendientes de sus hitos y contratos.
 
 ### 3.3 Stack y decisiones
 
@@ -115,6 +115,7 @@ Cada módulo contiene sus propios `models.py`, `schemas.py`, `servicio.py` y `ro
 | Integraciones | httpx y un adaptador por servicio | Firmas, formatos, timeouts e idempotencia aislados |
 | Sesión y secretos | bcrypt, token opaco y Fernet | Login revocable y credenciales fuera de respuestas y logs |
 | Archivos | Volumen privado y metadatos en PostgreSQL | Almacenamiento separado mediante un adaptador |
+| Importación | openpyxl en modo solo lectura | Plantilla Excel de EP-03; sin evaluar fórmulas ni macros; tamaño, entradas del zip y filas acotados |
 | Arquitectura | import-linter y pruebas de contrato | Fronteras verificables |
 | Web | React, TypeScript, Vite, Tailwind, React Router, TanStack Query y Leaflet | SPA con liquida-design y API del backend |
 
@@ -122,12 +123,12 @@ Cada módulo contiene sus propios `models.py`, `schemas.py`, `servicio.py` y `ro
 
 - `backend/`: API, reglas de negocio, runner interno y clientes de Satrack, OpenWA y voz-service.
 - `satrack-service/`: servicio existente de ubicaciones; conserva código, endpoints, configuración y despliegue.
-- OpenWA: servicio de terceros; configuración de imagen/revisión y sesión propuesta en `infra/openwa/`, sin copiar ni envolver su código.
-- PostgreSQL: imagen y volumen de datos; configuración y respaldo propuestos en `infra/postgres/`.
-- `voz-service/`: agentes de audio y adaptadores de voz/IA; directorio pendiente de implementación.
+- OpenWA: servicio de terceros; responsabilidades y requisitos de imagen/revisión y sesión documentados en `infra/openwa/`, sin copiar ni envolver su código.
+- PostgreSQL: imagen y volumen de datos; responsabilidades de configuración y respaldo documentadas en `infra/postgres/`.
+- `voz-service/`: agentes de audio y adaptadores de voz/IA; directorio creado con su frontera; servicio ejecutable pendiente.
 - `docs/`: arquitectura y contratos. Compose registra los servicios activos; voz se incorpora cuando esté implementada.
 
-El árbol completo propuesto está en [ARQUITECTURA_BACKEND.md](../docs/ARQUITECTURA_BACKEND.md). Los directorios propuestos no se presentan como creados ni los servicios pendientes como disponibles.
+El árbol aplicado está en [ARQUITECTURA_BACKEND.md](../docs/ARQUITECTURA_BACKEND.md). Las carpetas de servicios pendientes contienen documentación; todavía no habilitan conexiones.
 
 ### 3.5 Runner, persistencia y recuperación
 
@@ -165,9 +166,10 @@ Las operaciones que combinan módulos se enlazan explícitamente y conservan la 
 |---|---|---|
 | Acceso (`acceso`) | `transportadoras`, `usuarios`, `sesiones` | Usuario único; SHA-256 del token; transportadora obtenida de sesión |
 | Operación (`operacion`) | `conductores`, `vehiculos`, `viajes`, `remesas` | Cédula/placa únicas por transportadora; manifiesto único por transportadora; remesa única por viaje; pesos positivos |
-| Satelital (`satelital`) | `cuentas_satelitales`, `consultas_satelitales`, `posiciones`; `vehiculos_satelitales` en M1 | Una cuenta Satrack por transportadora; versión de credenciales; una consulta pendiente por cuenta; UUID único; punto único por vehículo/hora GPS conocida |
+| Satelital (`satelital`) | `cuentas_satelitales`, `consultas_satelitales`, `posiciones`, `vehiculos_satelitales` | Una cuenta Satrack por transportadora; versión de credenciales; una consulta pendiente por cuenta; UUID único; punto único por vehículo/hora GPS conocida |
 | Monitoreo (`monitoreo`) | `puntos_control`, `alertas`, `novedades`; `rutas_viaje` (GeoJSON) en M4 | Una alerta abierta por viaje/tipo; atención auditada; ruta/coordenadas opcionales |
-| Comunicación (`mensajeria`, `core.tareas`) | `canales_whatsapp`, `mensajes`; `entregas_pendientes` técnicas para el runner | ID externo/idempotencia únicos; destinatario, estado, intentos, próxima ejecución y vencimiento de reclamación |
+| Comunicación (`mensajeria`) | `canales_whatsapp`, `mensajes` | ID externo/idempotencia únicos |
+| Entregas internas (`core`) | `entregas_pendientes` técnicas (`core/models.py`, consumidas por `core/eventos.py`) | Consumidor estable, clave de deduplicación, estado, intentos, próxima ejecución y vencimiento de reclamación |
 | Documentos (`documentos`) | `archivos_privados`, `cumplidos`, `versiones_cumplido` (+ archivos) | Soporte versionado; aprobación ligada a versión; cambios invalidan aprobación pendiente |
 | Reportes (`indicadores`) | `reportes` (M4) | Período, viajes incluidos y estado de envío |
 | Agentes de audio (`voz-service`, pendiente) | Sesiones conversacionales y contexto de ejecución | Solicita acciones mediante API; el backend registra y audita efectos de negocio |
@@ -180,11 +182,11 @@ Entidades de negocio con `transportadora_id`; relaciones y accesos dentro de esa
 
 Usuarios por CLI; login con bcrypt; token aleatorio de 32 bytes, hash SHA-256 en BD y vencimiento de siete días. Navegador usa `sessionStorage` y Bearer; `401` limpia sesión/caché; logout revoca la fila. Sin registro público, roles, OAuth, JWT ni refresh tokens. Intentos de login limitados y error genérico.
 
-Secretos por variables de entorno, fuera de Git/logs/respuestas. Satrack cifrado con Fernet; respaldar `SECRET_KEY` con BD para conservar acceso a credenciales. Archivos privados con límites de tamaño/tipo, nombres generados y acceso autorizado o enlaces firmados breves.
+Secretos por variables de entorno, fuera de Git/logs/respuestas. Satrack cifrado con Fernet usando `ENCRYPTION_KEYS` (rotable con `python -m app.cli recifrar`, independiente de `SECRET_KEY`); respaldar las claves junto con la BD. Archivos privados con límites de tamaño/tipo, nombres generados y acceso autorizado o enlaces firmados breves.
 
 ### 4.3 Invariantes de negocio
 
-- Placa `AAA999`; cédula de 6–10 dígitos; celular colombiano `+57`; origen distinto de destino; llegada posterior a salida; al menos una remesa; peso total calculado en servidor. Excel agrupa filas por manifiesto y valida el viaje completo antes de crearlo; un grupo inválido no genera un viaje parcial.
+- Placa `AAA999`; cédula de 6–10 dígitos; celular colombiano `+57`; origen distinto de destino; llegada posterior a salida; al menos una remesa; peso total calculado en servidor. Excel agrupa filas por manifiesto y valida el viaje completo antes de crearlo; un grupo inválido no genera un viaje parcial. La importación reutiliza conductores y vehículos existentes sin modificarlos ni cambiar su consentimiento (si el celular no coincide, rechaza ese manifiesto) y los conductores nuevos quedan sin autorización; las fechas sin zona se interpretan en `America/Bogota` y un número no se acepta como fecha.
 - `registrado`, `programado`, `en_ruta`, `con_novedad` reservan conductor/vehículo. Restricciones de BD impiden reservas simultáneas, incluidas pendientes de verificación. Entregar/cancelar libera la reserva aunque el cierre documental siga pendiente.
 - Sin Satrack se puede guardar el viaje `registrado`; `programado` requiere placa confirmada con la configuración vigente.
 - Hora GPS nullable: **nunca se sustituye por captura**. Coordenadas ausentes/`0,0`, velocidad desconocida y fechas ilegibles significan dato no disponible, no señal GPS reciente.
@@ -216,11 +218,12 @@ Rutas `/api` con sesión salvo login. Callback satelital privado; webhooks exter
 |---|---|
 | POST `/api/auth/login`; GET `/api/auth/me`; POST `/api/auth/logout` | Acceso, usuario y revocación |
 | GET `/api/panel`, `/api/indicadores` | Operación, conexión, pendientes y métricas |
-| GET/POST `/api/viajes`; POST `/api/viajes/importar` | Lista/filtros/paginación, alta con remesas e importación por viaje |
+| GET/POST `/api/viajes`; POST `/api/viajes/importar`; GET `/api/viajes/plantilla` | Lista/filtros/paginación, alta con remesas, importación atómica por manifiesto y plantilla Excel |
 | GET `/api/viajes/{id}`; POST `/api/viajes/{id}/transiciones` | Detalle y cambio válido |
 | GET `/api/viajes/{id}/posiciones`; PUT `/api/viajes/{id}/ruta` | Historial acotado y ruta/puntos de control |
-| GET `/api/vehiculos`, `/api/conductores` | Catálogos y última posición |
-| GET/PUT `/api/cuenta-satelital`; POST `/api/cuenta-satelital/sincronizar`, `/api/cuenta-satelital/consultar` | Credenciales/estado, verificación de placas y consulta manual |
+| GET `/api/vehiculos`, `/api/conductores` | Catálogos paginados (`items`, `total`, `page`, `page_size`) y última posición |
+| GET `/api/configuracion` | Parámetros vigentes de la transportadora, solo lectura |
+| GET/PUT `/api/cuenta-satelital`; POST `/api/cuenta-satelital/sincronizar`, `/api/cuenta-satelital/consultar`; GET `/api/consultas-satelitales/{job_id}` | Credenciales/estado, verificación de placas, consulta manual y resultado persistido |
 | GET `/api/alertas`; POST `/api/alertas/{id}/atender`, `/api/alertas/{id}/cerrar` | Lista, comentario/atención y resolución justificada |
 | GET/POST `/api/viajes/{id}/mensajes`, `/api/viajes/{id}/llamadas` | Historial/contacto manual autorizado |
 | GET `/api/mensajes/sin-viaje`; POST `/api/mensajes/{id}/asociar` | Revisión/asociación de entradas dentro de la empresa |
@@ -244,7 +247,7 @@ Callback: `job_id`, `type`, `status` (`ok`/`partial`/`failed`), `finished_at`, `
 2. Una consulta pendiente por cuenta. El runner revisa cuentas cada 60 s y consulta cada 5–10 min según configuración; monitorea viajes en ruta/con novedad y programados desde una hora antes de salida. El usuario también puede sincronizar la flota o consultar ubicaciones. Sin placas elegibles no se pide ubicación; verificar flota es un job aparte.
 3. Scraper: tres jobs/sesiones, cola de 50, inactividad 15 min y timeout 120 s incluyendo espera. Selenium en proceso cancelable por cuenta: cancelar un hilo no garantiza parar el navegador.
 4. Callback: cuatro intentos con pausas 2/10/30 s. Backend valida firma/UUID/tipo/versión de cuenta, bloquea consulta y confirma datos/eventos en una transacción. Duplicado aplicado → `200` sin repetir efectos.
-5. Tras 240 s sin resultado, el runner aplica timeout/recuperación y cuenta el fallo una sola vez. Callback tardío válido aporta historial, sin reemplazar datos/estado recientes. Cambiar credenciales invalida resultados anteriores.
+5. Tras 240 s sin resultado, contados desde el primer POST, el runner aplica timeout y cuenta el fallo una sola vez. Antes de vencer una consulta pregunta al scraper: si el resultado está listo, lo aplica aunque la API haya estado detenida. Un resultado tardío de una consulta ya vencida o cancelada se guarda y aporta historial, sin cambiar el estado de la consulta ni de la cuenta ni reemplazar la última posición. Cambiar credenciales invalida resultados anteriores.
 6. El runner reconcilia consultas pendientes con `GET /v1/jobs/{job_id}` cada cinco segundos, sin depender de la Web o Postman. Un resultado terminado pasa por el mismo procesamiento idempotente del callback; si el scraper no conoce el UUID, se reenvía el mismo job mientras esté pendiente y su configuración siga vigente. Esto permite usar el servicio independiente con callback desactivado, sin cambiarlo. Los resultados completos validados se guardan en PostgreSQL, sin credenciales, y se consultan con sesión y aislamiento por transportadora.
 7. Sincronizar `vehicles` incorpora todas las placas válidas de la cuenta, conserva alias/identificador y guarda sus datos satelitales disponibles. Una respuesta parcial no marca como ausentes vehículos que no incluye. El historial y la última posición se actualizan con las mismas reglas que `positions`.
 
@@ -283,7 +286,7 @@ ETA solo con ruta/muestras suficientes y etiquetada como estimación. ETA del co
 
 Diagnóstico enlazado solo a loopback; PostgreSQL/callback satelital en red privada. Puerto, autenticación y eventos de OpenWA se comprueban contra la revisión elegida antes del adaptador. Para piloto externo: HTTPS y únicamente webhooks necesarios.
 
-Configuración base: `DATABASE_URL`, `SECRET_KEY`, `SATRACK_SERVICE_URL`, `SATRACK_SERVICE_API_KEY`, `CALLBACK_SECRET`, `PROVIDER`, límites del scraper, `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_S`, `CONSULTA_TIMEOUT_S`, `SESSION_DAYS` y directorios privados. Los épicos de integración agregan solo configuración de proveedores activos; `.env.example` sin secretos reales.
+Configuración base: `DATABASE_URL`, `SECRET_KEY`, `ENCRYPTION_KEYS`, `SATRACK_SERVICE_URL`, `SATRACK_SERVICE_API_KEY`, `CALLBACK_SECRET`, `PROVIDER`, límites del scraper, `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_S`, `CONSULTA_TIMEOUT_S`, `SESSION_DAYS` y directorios privados. Los épicos de integración agregan solo configuración de proveedores activos; `.env.example` sin secretos reales.
 
 EP-01 entregará `DOCKER.md` con comandos, puertos definitivos, contenido/volúmenes, bootstrap, demo, logs y respaldo/restauración; manual operativo subordinado a este plan.
 
@@ -303,14 +306,14 @@ Validar acceso Satrack/campos GPS y acceso RNDC desde A para detectar bloqueos t
 
 | Hito | Módulos | Trabajo | Resultado verificable |
 |---|---|---|---|
-| **M0 · Separación** ✅ | `core`, `auditoria`, `acceso`, `operacion`, `satelital`, `indicadores`, y los paquetes documentados `documentos`, `mensajeria`, `monitoreo` y `agentes` | Separación inicial del código por dominio; errores de dominio; extensión de datos del vehículo; contratos de import-linter; pruebas por módulo sobre PostgreSQL. **Sin cambios de esquema ni de API** | `uv run lint-imports` con 6 contratos cumplidos; `uv run pytest` en verde; `alembic check` sin diferencias |
-| **M1 · Núcleo** | `satelital`, `operacion`, `core.tareas` | **Consultas persistentes:** la consulta se registra antes del POST; si el POST es ambiguo, no se marca `fallido` y decide la reconciliación; el runner reconcilia con `GET /v1/jobs/{id}` cada 5 s (callback y GET pasan por el mismo `apply_result` idempotente); un UUID desconocido se reenvía mientras siga vigente y con reintentos acotados; el timeout de 240 s cuenta el fallo una sola vez. **Persistencia y flota:** se guarda el resultado completo sin credenciales; la sincronización trae toda la flota sin marcar ausentes los vehículos de una respuesta parcial; `vehiculos_satelitales` resuelve la deuda de §3.2; nuevo `GET /api/consultas-satelitales/{job_id}`. **Operación y API:** importación Excel atómica por manifiesto; listados paginados; `GET /api/configuracion`; colección Postman | login → conectar Satrack → flota completa → registrar viaje → `programado` → ubicación → entregar, **con el callback desactivado, reiniciando la API a mitad de un job y verificando recuperación automática sin una petición de seguimiento** |
+| **M0 · Separación** ✅ | `core`, `auditoria`, `acceso`, `operacion`, `satelital`, `indicadores`, y los paquetes documentados `documentos`, `mensajeria`, `monitoreo` y `voz` | Separación por dominio, DTO públicos, composición por instancia, errores de dominio, entregas internas persistidas y runner independiente de FastAPI. Migración del estado satelital, con conservación de ubicaciones; contrato HTTP de operación conservado | `uv run lint-imports` con 7 contratos cumplidos; `uv run pytest` en verde; `alembic check` sin diferencias |
+| **M1 · Núcleo** ✅ | `satelital`, `operacion`, `acceso` (configuración), `core.tareas` | **Consultas persistentes:** la consulta se registra antes del POST; si el POST es ambiguo, no se marca `fallido` y decide la reconciliación; el runner reconcilia con `GET /v1/jobs/{id}` cada 5 s (callback y GET pasan por el mismo `apply_result` idempotente); un UUID desconocido se reenvía mientras siga vigente y con reintentos acotados; el timeout de 240 s cuenta el fallo una sola vez. **Persistencia y flota:** se guarda el resultado completo sin credenciales; la sincronización trae toda la flota sin marcar ausentes los vehículos de una respuesta parcial; `vehiculos_satelitales` resuelve la deuda de §3.2; nuevo `GET /api/consultas-satelitales/{job_id}`. **Operación y API:** importación Excel atómica por manifiesto; listados paginados; `GET /api/configuracion`; colección Postman | login → conectar Satrack → flota completa → registrar viaje → `programado` → ubicación → entregar, **con el callback desactivado, reiniciando la API a mitad de un job y verificando recuperación automática sin una petición de seguimiento** |
 | **M2 · Cumplido manual** | `documentos`, `indicadores` | Archivos privados; cumplido por remesa con versiones; datos declarados por una persona con su procedencia; validaciones; aprobar o rechazar una versión concreta; `estado_documental` del viaje; pendientes por antigüedad en días hábiles (estimación) | Viaje entregado con 2 remesas → subir fotos → rechazar v1 → aprobar v2 → el pendiente desaparece |
 | **M3 · WhatsApp y alertas** | `mensajeria` (primero un spike de OpenWA), `monitoreo` | Entregas persistidas para envíos y reintentos seguros mediante el runner; webhook firmado; bandeja sin viaje; solicitud de datos y recordatorios de cumplido; puntos de control; reglas de señal, detención, llegada detectada y llegada pactada vencida; atender y cerrar alertas | login → registrar viaje → alerta atendida → pedir soporte por WhatsApp → foto recibida → revisar y aprobar su versión → pendientes al día |
 | **M4 · Rutas y reportes** | `monitoreo`, `indicadores` | Ruta en GeoJSON con shapely: desvío, avance y ETA; resumen periódico y avisos mediante el runner, además de solicitudes manuales | Desvío detectado y resumen enviado |
 | Pendiente | `voz-service`, integración `voz` del backend y módulos futuros | Agentes de audio, extracción y RNDC cuando se definan proveedor y acceso (§3.6) | — |
 
-**Fronteras adicionales en M1:** las APIs internas devuelven DTO y las consultas compuestas se enlazan por instancia, sin registro global de extensiones. Se completa el runner con programación satelital, reconciliación, liderazgo y recuperación desde PostgreSQL. Las reacciones necesarias se persisten junto al cambio; M3 amplía esa misma infraestructura a envíos, recordatorios y evaluación temporal de reglas.
+**M1 terminado:** DTO, composición por instancia, flota completa con ubicaciones, resultado validado persistido, GET autenticado de consultas, catálogos paginados, `GET /api/configuracion`, importación Excel por manifiesto con plantilla y colección Postman por épico (con prueba de contrato contra las rutas). Runner con programación, reconciliación que consulta el GET antes de vencer, liderazgo y recuperación desde PostgreSQL; las reacciones internas se guardan junto al cambio. **Evidencia:** `scripts/verificar.sh` y `scripts/demo_m1.py`, que recorre login → Satrack → flota → viaje `programado` → ubicación → entregado con el callback desactivado y la API detenida a mitad de un job más tiempo que `CONSULTA_TIMEOUT_S`. **Límites conocidos:** aplicar un resultado de flota cuesta unas 11 sentencias por vehículo nuevo dentro de una transacción (medido; suficiente para flotas piloto); la integración con una cuenta Satrack real sigue sujeta a §10. M3 añade estados de envío OpenWA, recordatorios y reglas; no basta con reutilizar el consumidor transaccional de BD para hacer HTTP.
 
 **Decisiones de modelo para los hitos:**
 

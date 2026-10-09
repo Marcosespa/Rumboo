@@ -33,7 +33,8 @@ class SatrackServiceClient:
             if len(response.content) > 2_000_000:
                 raise ServicioSatelitalNoDisponible()
             state = JobState.model_validate_json(response.content)
-            if str(state.job_id) != job_id or (state.result and str(state.result.job_id) != job_id):
+            if str(state.job_id) != job_id or (state.result and (
+                    str(state.result.job_id) != job_id or state.result.type != state.type)):
                 raise ServicioSatelitalNoDisponible()
             return state
         except (httpx.HTTPError, ValidationError) as exc:

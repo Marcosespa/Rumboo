@@ -12,6 +12,8 @@ def current_user(db: DB, credentials: Annotated[HTTPAuthorizationCredentials | N
     if credentials is None:
         raise HTTPException(401, "Inicia sesión para continuar")
     user = user_for_token(db, credentials.credentials)
+    # Devuelve la conexión al pool: los endpoints que abren su propia sesión no deben retener dos por petición.
+    db.rollback()
     if user is None:
         raise HTTPException(401, "Tu sesión venció; vuelve a entrar")
     return user

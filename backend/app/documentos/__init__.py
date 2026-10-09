@@ -7,7 +7,7 @@ declarados por una persona y su procedencia, validar identificación, fecha, fir
 
 Archivos previstos:
 - almacenamiento.py: ÚNICO archivo que toca el disco (LocalFileStorage).
-- revision.py: aprobar/rechazar. Acciones solo humanas: import-linter impide que app.agentes las importe.
+- revision.py: aprobar/rechazar. Acciones humanas; la integración de voz no podrá aprobar soportes.
 - models.py, schemas.py, servicio.py, router.py, enlaces.py.
 
 Escuchará (vía app/main.py): `foto_recibida` de mensajeria para crear una versión con origen WhatsApp.

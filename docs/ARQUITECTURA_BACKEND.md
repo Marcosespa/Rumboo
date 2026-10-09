@@ -1,18 +1,18 @@
 # Arquitectura ortogonal del backend de Rumboo
 
-Organización propuesta para el primer MVP · 8 de octubre de 2026 · Complementa `backend/PLAN.md`.
+Arquitectura aplicada al núcleo del primer MVP · 8 de octubre de 2026 · Complementa `backend/PLAN.md`.
 
-La prioridad de esta revisión es definir los servicios, sus responsabilidades y cómo se conectan. El runner forma parte interna del backend para ejecutar el seguimiento y las acciones programadas. Esta revisión modifica documentación; las funcionalidades pendientes se implementarán por hito. Satrack conserva su implementación, configuración y despliegue.
+La prioridad de esta revisión es definir los servicios, sus responsabilidades y cómo se conectan. El runner forma parte interna del backend para ejecutar el seguimiento y las acciones programadas. El núcleo modular, las consultas satelitales recuperables y el runner están implementados; las funcionalidades restantes se implementarán por hito. Satrack conserva su implementación, configuración y despliegue.
 
 ## 1. Los cinco componentes
 
 | Componente | Responsabilidad | Datos que entrega | Estado |
 |---|---|---|---|
-| **Satrack (`satrack-service`)** | Traer la ubicación de diferentes vehículos de una cuenta satelital | Lista de vehículos; placa, dirección, coordenadas, velocidad, estado y hora GPS cuando estén disponibles | Servicio existente; falta completar su consumo y persistencia en el backend |
+| **Satrack (`satrack-service`)** | Traer la ubicación de diferentes vehículos de una cuenta satelital | Lista de vehículos; placa, dirección, coordenadas, velocidad, estado y hora GPS cuando estén disponibles | Servicio existente; consumo, flota y resultados persistidos en el backend |
 | **OpenWA** | Conectar WhatsApp para pedir y recibir datos del conductor | Mensajes, respuestas, fotos, audio, documentos y estado de entrega | Proveedor elegido; integración con el backend pendiente |
 | **`voz-service`** | Manejar los agentes de audio y las conversaciones con el conductor | Estado de la conversación, transcripción cuando esté disponible y datos estructurados: novedades, ETA o solicitudes de seguimiento | Componente definido; implementación y proveedor de voz/IA pendientes |
 | **PostgreSQL** | Guardar los datos de Rumboo y el trabajo pendiente de forma persistente | Viajes, conductores, vehículos, consultas, posiciones, mensajes, documentos, auditoría y acciones pendientes | Base de datos del backend; los modelos se amplían por hito |
-| **Backend Rumboo** | Aplicar las reglas de negocio y coordinar las integraciones, con API y runner interno | Validaciones, viajes, ubicaciones, alertas, solicitudes al conductor, revisión de soportes y seguimiento automático | Base modular existente; funcionalidades por completar |
+| **Backend Rumboo** | Aplicar las reglas de negocio y coordinar las integraciones, con API y runner interno | Validaciones, viajes, ubicaciones, alertas, solicitudes al conductor, revisión de soportes y seguimiento automático | Núcleo modular y runner implementados; funcionalidades restantes por hito |
 
 Los datos satelitales ausentes permanecen vacíos o `null`. La organización de `voz-service` no significa que las llamadas o los agentes ya estén implementados.
 
@@ -43,7 +43,7 @@ El backend es el punto de coordinación. Satrack, OpenWA y `voz-service` se comu
 
 ## 3. Organización del repositorio y despliegue
 
-Estructura propuesta; los directorios marcados como pendientes se crearán al implementar su integración.
+Estructura creada. Los paquetes de voz y las carpetas externas documentan sus fronteras; sus adaptadores y servicios pendientes aún no son ejecutables.
 
 ```text
 Rumboo/
@@ -53,15 +53,17 @@ Rumboo/
 │       ├── operacion/        Conductores, vehículos, viajes y remesas
 │       ├── satelital/        Consumo de Satrack y persistencia de ubicaciones
 │       ├── mensajeria/       Consumo de OpenWA y asociación de respuestas
-│       ├── voz/              Cliente de voz-service y validación de resultados (pendiente)
+│       ├── voz/              Frontera documentada; cliente y validación pendientes
 │       ├── documentos/       Cumplidos y revisión humana
 │       ├── monitoreo/        Reglas y alertas sobre los datos obtenidos
 │       ├── indicadores/      Panel y pendientes
 │       ├── auditoria/        Registro de acciones
-│       └── core/             Configuración, seguridad, BD, errores y runner (tareas.py)
+│       ├── core/             Seguridad, BD, entregas persistidas y runner (tareas.py)
+│       ├── consultas.py      Composición de DTO de varios módulos, por instancia
+│       └── main.py           Conecta routers, consumidores y tareas
 ├── satrack-service/          Servicio existente: ubicación de vehículos
-├── voz-service/              Agentes de audio y adaptadores de voz/IA (pendiente)
-├── infra/                    Configuración de despliegue (propuesta)
+├── voz-service/              Frontera documentada; agentes y adaptadores pendientes
+├── infra/                    Responsabilidades y operación de servicios externos
 │   ├── openwa/               Referencia a imagen/revisión y configuración de sesión
 │   └── postgres/             Configuración, persistencia y respaldo de la BD
 ├── docs/                     Arquitectura, contratos y operación
@@ -100,17 +102,18 @@ El estado operativo pertenece a operación, la aprobación documental a document
 
 El runner arranca y se detiene con el backend. `core/tareas.py` recibe funciones de los módulos mediante la composición, sin depender de FastAPI ni importar reglas de negocio. Cada ejecución usa su propia sesión de BD. Al inicio hay un único ejecutor, dentro del proceso de la API.
 
-| Tarea | Responsabilidad y frecuencia |
-|---|---|
-| Programar consultas | Revisar cuentas cada 60 s y consultar viajes elegibles cada 5–10 min según configuración; una consulta pendiente por cuenta |
-| Seguir jobs Satrack | Consultar el GET existente cada 5 s mientras el job siga pendiente, incluso sin callback |
-| Evaluar reglas | Al recibir posiciones y cada 60 s para reglas que dependen del tiempo; un fallo del proveedor no implica pérdida de señal del vehículo |
-| Ejecutar acciones pendientes | Enviar solicitudes y avisos mediante los adaptadores; guardar aceptación/error y aplicar reintentos seguros |
-| Recordatorios y reportes | Según configuración y consentimiento, desde los hitos de WhatsApp y reportes; voz solo cuando se implemente su integración |
+| Tarea | Responsabilidad y frecuencia | Estado |
+|---|---|---|
+| Programar consultas | Revisar cuentas cada 60 s y consultar viajes elegibles cada 5–10 min según configuración; una consulta pendiente por cuenta | Implementada |
+| Seguir jobs Satrack | Consultar el GET existente cada 5 s mientras el job siga pendiente, incluso sin callback | Implementada |
+| Evaluar reglas | Al recibir posiciones y cada 60 s para reglas que dependen del tiempo; un fallo del proveedor no implica pérdida de señal del vehículo | Pendiente M3 |
+| Entregar eventos internos | Consumir `entregas_pendientes` cada 2 s; aplicar cambios de BD y confirmar entrega en la misma transacción | Implementada |
+| Enviar mensajes y avisos | Guardar intención, ejecutar HTTP fuera de transacciones y reconciliar aceptación/entrega | Pendiente M3 |
+| Recordatorios y reportes | Según configuración y consentimiento, desde los hitos de WhatsApp y reportes; voz solo cuando se implemente su integración | Pendiente M3/M4 y voz |
 
-Las consultas se guardan antes del POST a Satrack. El callback y el GET convergen en un procesamiento idempotente. Un POST incierto se reconcilia antes de declarar fallo; si el UUID desaparece, se reenvía la consulta todavía vigente con reintentos acotados. Tras 240 s sin resultado se registra el fallo una sola vez. Un cambio de credenciales invalida efectos antiguos y las respuestas tardías no se asignan a un nuevo viaje.
+Las consultas se guardan antes del POST a Satrack. El callback y el GET convergen en un procesamiento idempotente. Un POST incierto se reconcilia antes de declarar fallo; si el UUID desaparece, se reenvía la consulta todavía vigente con reintentos acotados. Tras 240 s desde el primer POST se registra el fallo una sola vez, pero antes se consulta el GET: un resultado listo se aplica aunque la API haya estado detenida más tiempo. Un resultado tardío de una consulta vencida o cancelada solo aporta historial. Un cambio de credenciales invalida efectos antiguos y las respuestas tardías no se asignan a un nuevo viaje.
 
-Las acciones externas pendientes se guardan junto al cambio que las origina, con clave de idempotencia, estado, intentos y próxima ejecución. El runner reclama una acción con bloqueo breve y vencimiento de la reclamación, hace HTTP fuera de la transacción y registra el resultado. La aceptación del proveedor y la entrega al destinatario son estados distintos. Un envío incierto se reconcilia o pasa a revisión; no se reenvía a ciegas.
+Los eventos internos se guardan en `entregas_pendientes` junto al cambio de negocio. Cada consumidor tiene nombre estable, clave de deduplicación, intentos y reclamación con vencimiento. Su efecto en BD y la confirmación se guardan juntos; las reclamaciones vencidas se recuperan, hasta cinco intentos. El consumidor satelital reserva una consulta; el HTTP posterior se ejecuta fuera de la transacción. En M3 los envíos OpenWA tendrán su estado propio y deberán distinguir aceptación de entrega y reconciliar envíos inciertos según el contrato real del proveedor.
 
 **Recuperación:** PostgreSQL conserva las consultas y acciones pendientes. Después de reiniciar, el runner retoma su seguimiento sin que el usuario tenga que abrir la Web. Las reclamaciones vencidas se recuperan y los efectos se deduplican. No se promete ejecución exactamente una vez.
 
@@ -120,16 +123,24 @@ El trabajo periódico y los efectos pendientes usan PostgreSQL en el MVP, sin Re
 
 ## 6. Orden de trabajo
 
-1. **Organizar componentes y contratos:** esta revisión. Responsabilidades de los cinco componentes, entradas/salidas y separación entre servicios externos y negocio.
-2. **Completar backend + Satrack y runner:** flota completa como lista de objetos, resultados persistidos, consultas periódicas y recuperación del seguimiento tras reinicio. Sin modificar Satrack.
+1. **Organizar componentes y contratos:** implementado en esta entrega. Responsabilidades de los cinco componentes, entradas/salidas y separación entre servicios externos y negocio.
+2. **Backend + Satrack y runner:** implementados flota completa como lista de objetos, resultados persistidos, consultas periódicas y recuperación tras reinicio. Nuevo GET autenticado `/api/consultas-satelitales/{job_id}`. Migración `847a65cf24dd` separa el estado satelital y conserva ubicaciones previas. Importación Excel por manifiesto con plantilla, catálogos paginados y `GET /api/configuracion`. `scripts/demo_m1.py` reproduce el resultado verificable de M1 con procesos reales.
 3. **Cumplido manual:** soportes privados por remesa, versiones, aprobación/rechazo y pendientes.
 4. **Integrar OpenWA:** solicitar datos del conductor, recibir/asociar sus respuestas y soportes, y ejecutar recordatorios con deduplicación y consentimiento.
 5. **Implementar `voz-service`:** después de elegir proveedor de voz/IA y fijar su contrato; agentes de audio dentro del servicio y acciones validadas por el backend.
 
-La extracción automática y RNDC siguen pendientes. La revisión actual no crea código ni despliega servicios nuevos.
+La extracción automática y RNDC siguen pendientes. Esta entrega modifica el backend y organiza las carpetas externas; no despliega servicios nuevos.
 
 ## 7. Verificación de las fronteras
 
-Se prueban módulos de negocio con clientes falsos de Satrack, OpenWA y voz. Las pruebas comprueban aislamiento entre transportadoras, contratos de datos, respuestas duplicadas, errores externos, recuperación automática tras reinicio y aprobación por versión. El runner se prueba sin construir FastAPI: liderazgo, reclamaciones vencidas, reintentos y aislamiento de fallos. Las importaciones entre módulos deben conservar sus fronteras; los servicios de negocio no dependen de FastAPI.
+El núcleo se prueba sobre PostgreSQL real con un cliente falso de Satrack. OpenWA, voz, documentos y sus pruebas se incorporarán con sus hitos. Las pruebas comprueban aislamiento entre transportadoras, contratos de datos, respuestas duplicadas, errores externos, recuperación automática tras reinicio, flota completa y conservación de ubicaciones en la migración. La aprobación por versión se probará en M2. El runner se prueba sin construir FastAPI: liderazgo, reclamaciones vencidas, reintentos y aislamiento de fallos. Las importaciones entre módulos deben conservar sus fronteras; los servicios de negocio no dependen de FastAPI.
 
 Cambiar el formato de OpenWA afecta su adaptador y pruebas de contrato; cambiar una regla afecta el módulo de negocio; cambiar el proveedor de audio afecta `voz-service`. Los consumidores se mantienen mientras se conserve el contrato acordado.
+
+## 8. Aplicación y límites de esta entrega
+
+Ejecutar desde `backend/`: `uv run alembic upgrade head` antes de iniciar la API. La migración conserva presencia y última posición de vehículos vinculados a una cuenta; los jobs existentes se concilian antes de repetir un POST. No se aplicó a una BD operativa ni se reinició Satrack.
+
+`SCHEDULER_ENABLED=true` habilita el runner. Frecuencias: `SCHEDULER_INTERVAL_S=60`, `RECONCILIATION_INTERVAL_S=5`, `EVENTOS_INTERVAL_S=2`; comprobación de liderazgo `RUNNER_LOCK_CHECK_S=1`. `/health` muestra tareas y conteos de entregas.
+
+Si se acumulan entregas `fallido`, requieren revisión de su consumidor; no se reactivan indefinidamente. El runner vive con la API: apagar todo el backend pausa el seguimiento hasta su siguiente arranque. El proceso independiente y la salud compartida entre réplicas quedan para cuando el volumen los justifique.

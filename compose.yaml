@@ -58,6 +58,8 @@ services:
       PROVIDER: ${PROVIDER:-satrack}
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
+    # Acota el peor caso de una importación Excel (~300 MB, una a la vez) sin tumbar el host.
+    mem_limit: 1g
     depends_on:
       db:
         condition: service_healthy

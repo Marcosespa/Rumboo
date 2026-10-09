@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 CALLBACK_SECRET = "test-callback-secret-0123"
@@ -17,10 +18,11 @@ def trip_body(manifiesto="MAN-1", placa="ABC123", cedula="1012345678", departure
                         {"numero": "R-2", "cliente": "Cliente", "peso_kg": 500}]}
 
 
-def send_callback(client, job_id, kind, status="ok", vehicles=(), positions=(), errors=(), secret=CALLBACK_SECRET):
+def send_callback(client, job_id, kind, status="ok", vehicles=(), positions=(), errors=(), secret=CALLBACK_SECRET, sent_at=None):
     payload = {"job_id": job_id, "type": kind, "status": status, "finished_at": datetime.now(timezone.utc).isoformat(),
                "vehicles": list(vehicles), "positions": list(positions), "errors": list(errors)}
     body = json.dumps(payload).encode()
-    signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    timestamp = str(int(sent_at or time.time()))
+    signature = "sha256=" + hmac.new(secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
     return client.post("/internal/satrack/callback", content=body,
-                       headers={"X-Signature": signature, "X-Job-Id": job_id, "Content-Type": "application/json"})
+                       headers={"X-Signature": signature, "X-Timestamp": timestamp, "X-Job-Id": job_id, "Content-Type": "application/json"})

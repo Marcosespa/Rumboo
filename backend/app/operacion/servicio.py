@@ -1,6 +1,9 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from app.acceso.servicio import lock_carrier
 from app.auditoria.servicio import eventos_de_viaje, registrar_evento
 from app.core import eventos
@@ -8,7 +11,11 @@ from app.core.db import now
 from app.core.errores import Conflicto, Invalido, NoEncontrado
 from app.core.paginacion import paginar
 from app.operacion.models import ACTIVE_STATES, Conductor, Remesa, Vehiculo, Viaje
-from app.operacion.schemas import ConductorDTO, RemesaDTO, VehiculoDTO, ViajeDTO
+from app.operacion.schemas import (ConductorDTO, ErrorImportacionDTO, RemesaDTO, ResultadoImportacionDTO, VehiculoDTO,
+                                   ViajeDTO, ViajeImportadoDTO, ViajeInput)
+
+BOGOTA = ZoneInfo("America/Bogota")
+
 
 def _trip(db, tenant, trip_id, lock=False):
     query = select(Viaje).where(Viaje.id == trip_id, Viaje.transportadora_id == tenant)
@@ -33,7 +40,8 @@ def _trip_dto(db, trip, detail=False):
 
 
 def list_trips(db, tenant, state, text, page, page_size):
-    query = select(Viaje).join(Vehiculo).join(Conductor).where(Viaje.transportadora_id == tenant)
+    query = select(Viaje).options(selectinload(Viaje.conductor), selectinload(Viaje.vehiculo))\
+        .join(Vehiculo).join(Conductor).where(Viaje.transportadora_id == tenant)
     if state:
         query = query.where(Viaje.estado == state)
     if text.strip():
@@ -42,15 +50,19 @@ def list_trips(db, tenant, state, text, page, page_size):
     return paginar(db, query.order_by(Viaje.id.desc()), page, page_size, lambda t: _trip_dto(db, t))
 
 
-def list_vehicles(db, tenant):
-    return [VehiculoDTO.model_validate(v) for v in db.scalars(select(Vehiculo).where(Vehiculo.transportadora_id == tenant).order_by(Vehiculo.placa))]
+def list_vehicles(db, tenant, page, page_size):
+    query = select(Vehiculo).where(Vehiculo.transportadora_id == tenant).order_by(Vehiculo.placa, Vehiculo.id)
+    return paginar(db, query, page, page_size, VehiculoDTO.model_validate)
 
 
-def list_drivers(db, tenant):
-    return [ConductorDTO.model_validate(d) for d in db.scalars(select(Conductor).where(Conductor.transportadora_id == tenant).order_by(Conductor.nombre))]
+def list_drivers(db, tenant, page, page_size):
+    query = select(Conductor).where(Conductor.transportadora_id == tenant).order_by(Conductor.nombre, Conductor.id)
+    return paginar(db, query, page, page_size, ConductorDTO.model_validate)
 
 
-def create_trip(db, user, data):
+def create_trip(db, user, data, update_catalog=True):
+    """update_catalog=False (importación): reutiliza conductor y vehículo existentes sin modificarlos ni tocar su
+    consentimiento; si el celular difiere, rechaza el viaje para no dejar autorizado un número no confirmado."""
     tenant = user.transportadora_id
     # Serialize reservations within one carrier, backed by unique active indexes.
     lock_carrier(db, tenant)
@@ -64,14 +76,17 @@ def create_trip(db, user, data):
     if not driver:
         driver = Conductor(transportadora_id=tenant, **data.conductor.model_dump())
         db.add(driver)
-    else:
+    elif update_catalog:
         for key, value in data.conductor.model_dump().items():
             setattr(driver, key, value)
-    driver.autorizado_en = now() if driver.autoriza_contacto else None
+    elif driver.telefono != data.conductor.telefono:
+        raise Conflicto("El celular del conductor no coincide con el registrado; actualízalo desde el formulario")
+    if update_catalog:
+        driver.autorizado_en = now() if driver.autoriza_contacto else None
     if not vehicle:
         vehicle = Vehiculo(transportadora_id=tenant, **data.vehiculo.model_dump())
         db.add(vehicle)
-    else:
+    elif update_catalog:
         vehicle.propietario = data.vehiculo.propietario
     try:
         db.flush()
@@ -86,10 +101,95 @@ def create_trip(db, user, data):
         # Satelital decide si la placa ya está verificada (programado) o pide verificarla.
         eventos.publicar(db, "viaje_registrado", transportadora_id=tenant, viaje_id=trip.id, vehiculo_id=vehicle.id)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as err:
         db.rollback()
-        raise Conflicto("El manifiesto, conductor o vehículo ya está asociado a otro viaje activo")
+        raise Conflicto("El manifiesto, conductor o vehículo ya está asociado a otro viaje activo") from err
     return _trip_dto(db, trip, detail=True)
+
+
+TRIP_COLUMNS = ("origen", "destino", "salida_estimada", "llegada_estimada", "conductor_nombre", "conductor_cedula",
+                "conductor_telefono", "placa", "propietario")
+
+
+def _text(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
+
+
+def _date(value):
+    """Solo fechas reales: un número (serial de Excel o texto de dígitos) no debe leerse como segundos Unix."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.strip())
+        except ValueError:
+            return None  # la validación del viaje informa el campo
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=BOGOTA) if value.tzinfo is None else value
+
+
+def _column(loc):
+    if not loc:
+        return None
+    if loc[0] == "conductor" and len(loc) > 1:
+        return f"conductor_{loc[1]}"
+    if loc[0] == "vehiculo" and len(loc) > 1:
+        return str(loc[1])
+    if loc[0] == "remesas" and len(loc) > 2:
+        return f"remesa_{loc[2]}"
+    return str(loc[0])
+
+
+def _trip_from_rows(manifest, rows):
+    first = rows[0]
+    return ViajeInput(
+        manifiesto=manifest, origen=_text(first.get("origen")), destino=_text(first.get("destino")),
+        salida_estimada=_date(first.get("salida_estimada")), llegada_estimada=_date(first.get("llegada_estimada")),
+        conductor={"nombre": _text(first.get("conductor_nombre")), "cedula": _text(first.get("conductor_cedula")),
+                   "telefono": _text(first.get("conductor_telefono")), "autoriza_contacto": False},
+        vehiculo={"placa": _text(first.get("placa")), "propietario": _text(first.get("propietario"))},
+        remesas=[{"numero": _text(r.get("remesa_numero")), "cliente": _text(r.get("remesa_cliente")),
+                  "peso_kg": r.get("remesa_peso_kg"), "cantidad": r.get("remesa_cantidad") or None} for r in rows])
+
+
+def import_trips(db, user, rows):
+    """Un viaje por manifiesto, cada uno en su propia transacción: un grupo inválido no crea nada y no impide los
+    demás. No modifica conductores ni vehículos existentes. Los errores no repiten valores de celdas."""
+    groups, errors, created = {}, [], []
+    for row in rows:
+        manifest = _text(row.get("manifiesto"))
+        if not manifest:
+            errors.append(ErrorImportacionDTO(manifiesto="", filas=(row["fila"],), campo="manifiesto",
+                                              mensaje="El manifiesto es obligatorio"))
+            continue
+        groups.setdefault(manifest, []).append(row)
+    for manifest, group in groups.items():
+        lines = tuple(r["fila"] for r in group)
+        mixed = next((c for c in TRIP_COLUMNS if len({_text(r.get(c)) for r in group}) > 1), None)
+        if mixed:
+            errors.append(ErrorImportacionDTO(manifiesto=manifest, filas=lines, campo=mixed,
+                                              mensaje="Las filas del manifiesto deben tener el mismo valor"))
+            continue
+        try:
+            data = _trip_from_rows(manifest, group)
+        except ValidationError as err:
+            for error in err.errors():
+                loc = error["loc"]
+                rows_of_error = (group[loc[1]]["fila"],) if loc[:1] == ("remesas",) and len(loc) > 2 else lines
+                errors.append(ErrorImportacionDTO(manifiesto=manifest, filas=rows_of_error, campo=_column(loc),
+                                                  mensaje=error["msg"].replace("Value error, ", "")))
+            continue
+        try:
+            trip = create_trip(db, user, data, update_catalog=False)
+        except Conflicto as err:
+            db.rollback()
+            errors.append(ErrorImportacionDTO(manifiesto=manifest, filas=lines, campo=None, mensaje=err.mensaje))
+            continue
+        created.append(ViajeImportadoDTO(manifiesto=manifest, id=trip.id))
+    return ResultadoImportacionDTO(creados=tuple(created), errores=tuple(errors))
 
 
 def transition(db, user, trip_id, data):
@@ -121,7 +221,9 @@ def vehicle_by_plate(db, tenant, plate):
 
 
 def vehicles_of(db, tenant):
-    return list_vehicles(db, tenant)
+    """Flota completa, sin paginar, para la sincronización satelital."""
+    return [VehiculoDTO.model_validate(v) for v in db.scalars(
+        select(Vehiculo).where(Vehiculo.transportadora_id == tenant).order_by(Vehiculo.placa))]
 
 
 def import_vehicle(db, tenant, plate):
@@ -157,6 +259,15 @@ def journey_snapshot(db, tenant, plates):
     return dict(rows.all())
 
 
+def trip_departures(db, tenant, trip_ids):
+    """Salida estimada por viaje, en una sola consulta, para asociar posiciones por lotes."""
+    ids = set(trip_ids)
+    if not ids:
+        return {}
+    return dict(db.execute(select(Viaje.id, Viaje.salida_estimada).where(
+        Viaje.transportadora_id == tenant, Viaje.id.in_(ids))).all())
+
+
 def plates_to_monitor(db, tenant, at):
     """Placas en ruta, con novedad o programadas para salir dentro de una hora."""
     return list(db.scalars(select(Vehiculo.placa).join(Viaje, Viaje.vehiculo_id == Vehiculo.id).where(
@@ -176,6 +287,7 @@ def trip_counts(db, tenant, delivered_since):
 
 
 def active_trips(db, tenant, limit=10):
-    rows = db.scalars(select(Viaje).where(Viaje.transportadora_id == tenant, Viaje.estado.in_(ACTIVE_STATES))
+    rows = db.scalars(select(Viaje).options(selectinload(Viaje.conductor), selectinload(Viaje.vehiculo))
+                      .where(Viaje.transportadora_id == tenant, Viaje.estado.in_(ACTIVE_STATES))
                       .order_by(Viaje.id.desc()).limit(limit))
     return [_trip_dto(db, trip) for trip in rows]

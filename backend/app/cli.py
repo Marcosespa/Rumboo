@@ -12,7 +12,7 @@ from app.core.config import Settings
 from app.core.db import make_engine, now
 from app.core.seguridad import cipher
 from app.operacion.models import Conductor, Remesa, Vehiculo, Viaje
-from app.satelital.models import ConsultaSatelital, CuentaSatelital, Posicion
+from app.satelital.models import ConsultaSatelital, CuentaSatelital, Posicion, VehiculoSatelital
 from app.satelital.servicio import reencrypt_accounts
 
 
@@ -34,7 +34,7 @@ def seed_demo(db, settings, user):
                ("DEF456", "Carlos Rojas", "entregado", "Girardot", 4.3, -74.8)]
     for i, (plate, name, state, destination, lat, lng) in enumerate(samples):
         driver = Conductor(transportadora_id=tenant, nombre=name, cedula=str(1012345600 + i), telefono=f"+57300123456{i}", autoriza_contacto=True, autorizado_en=now())
-        vehicle = Vehiculo(transportadora_id=tenant, placa=plate, propietario="Flota demo", en_satelital=True)
+        vehicle = Vehiculo(transportadora_id=tenant, placa=plate, propietario="Flota demo")
         db.add_all([driver, vehicle])
         db.flush()
         trip = Viaje(transportadora_id=tenant, manifiesto=f"DEMO-{1001 + i}", conductor_id=driver.id, vehiculo_id=vehicle.id, origen="Bogotá", destino=destination,
@@ -48,7 +48,9 @@ def seed_demo(db, settings, user):
                             estado_gps="simulación", reportado_en=now(), capturado_en=now())
         db.add(position)
         db.flush()
-        vehicle.ultima_posicion_id = position.id
+        db.add(VehiculoSatelital(vehiculo_id=vehicle.id, transportadora_id=tenant,
+                                cuenta_satelital_id=account.id, cuenta_version=account.version,
+                                en_satelital=True, ultima_posicion_id=position.id))
         db.add(Evento(transportadora_id=tenant, viaje_id=trip.id, usuario_id=user.id, tipo="viaje_creado", detalle={"estado": state, "demo": True}))
     db.commit()
 

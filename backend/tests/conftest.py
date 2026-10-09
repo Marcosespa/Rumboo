@@ -13,12 +13,14 @@ from alembic import command
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.engine import make_url
 from app.acceso.servicio import create_user
 from app.core.config import Settings
 from app.core.db import make_engine
 from app.main import create_app
 from app.modelos import metadata
 from app.satelital.cliente import ServicioSatelitalNoDisponible
+from app.satelital.schemas import JobState
 from tests.ayudas import CALLBACK_SECRET, PASSWORD
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -38,11 +40,18 @@ class FakeSatrack:
     def __init__(self):
         self.jobs = []
         self.available = True
+        self.states = {}
 
     async def send_job(self, job):
         if not self.available:
             raise ServicioSatelitalNoDisponible()
         self.jobs.append(job)
+        self.states[job["job_id"]] = JobState(job_id=job["job_id"], type=job["type"], status="running")
+
+    async def get_job(self, job_id):
+        if not self.available:
+            raise ServicioSatelitalNoDisponible()
+        return self.states.get(job_id)
 
     async def close(self):
         pass
@@ -50,6 +59,8 @@ class FakeSatrack:
 
 @pytest.fixture(scope="session")
 def engine():
+    if not (make_url(TEST_DATABASE_URL).database or "").endswith("_test"):
+        pytest.exit("La BD desechable debe terminar en _test antes de borrar el esquema", returncode=2)
     engine = make_engine(TEST_DATABASE_URL)
     try:
         with engine.begin() as connection:

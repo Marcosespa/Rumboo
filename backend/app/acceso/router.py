@@ -36,3 +36,11 @@ def me(user: User):
 def logout(user: User, db: DB, credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]):
     servicio.revoke_session(db, credentials.credentials)
     return {"status": "ok"}
+
+
+configuracion_router = APIRouter(prefix="/api/configuracion", tags=["Configuración"])
+
+
+@configuracion_router.get("")
+def configuracion(user: User, db: DB):
+    return servicio.configuracion(db, user.transportadora_id)

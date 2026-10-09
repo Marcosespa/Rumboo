@@ -49,7 +49,7 @@ class CallbackVehicle(DatosGPS):
 
 
 class CallbackError(BaseModel):
-    code: str = Field(max_length=80)
+    code: str = Field(max_length=60)
     message: str = Field(max_length=1000)
     plate: str | None = Field(default=None, max_length=100)
 

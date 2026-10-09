@@ -1,0 +1,927 @@
+{
+  "info": {
+    "name": "Rumboo · API por épico",
+    "description": "Una carpeta por épico de backend/PLAN.md, en orden de ejecución. Ejecutar completa (Runner o newman): cada carpeta deja variables para la siguiente. Requiere PROVIDER=simulator. Sin endpoints todavía: EP-07 a EP-12, EP-14 y EP-15. Docker: scripts/probar_docker.sh.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "satJobId",
+      "value": ""
+    },
+    {
+      "key": "tripId",
+      "value": ""
+    },
+    {
+      "key": "manifiesto",
+      "value": ""
+    },
+    {
+      "key": "salida",
+      "value": ""
+    },
+    {
+      "key": "llegada",
+      "value": ""
+    },
+    {
+      "key": "intentos",
+      "value": ""
+    },
+    {
+      "key": "placa",
+      "value": "ABC123"
+    }
+  ],
+  "item": [
+    {
+      "name": "EP-01 · Plataforma",
+      "description": "Salud de la API y su base de datos.",
+      "item": [
+        {
+          "name": "Salud de la API",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('base de datos ok', () => pm.expect(pm.response.json().database).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-02 · Acceso",
+      "description": "Login, sesión actual y rechazo sin token.",
+      "item": [
+        {
+          "name": "Login con contraseña incorrecta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuario}}\",\n  \"password\": \"incorrecta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "pm.test('mensaje genérico', () => pm.expect(pm.response.json().detail).to.eql('Usuario o contraseña incorrectos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"{{usuario}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('token', pm.response.json().token);pm.test('sin la contraseña en la respuesta', () => pm.expect(pm.response.text()).to.not.include(pm.variables.get('password')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sesión actual",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/auth/me",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('usuario con transportadora', () => pm.expect(pm.response.json().transportadora.nombre).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configuración",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/configuracion",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('frecuencia del piloto (5 a 10 min)', () => pm.expect(c.frecuencia_consulta_min).to.be.within(5, 10));",
+                  "pm.test('zona horaria de Colombia', () => pm.expect(c.zona_horaria).to.eql('America/Bogota'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin token (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/auth/me",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-05 · Cuenta satelital y consultas",
+      "description": "Conecta la cuenta (simulador), sincroniza la flota y espera el resultado.",
+      "item": [
+        {
+          "name": "Conectar cuenta",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/cuenta-satelital",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"demo\",\n  \"password\": \"{{satrackPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('consulta de flota pendiente', () => pm.expect(pm.response.json().consulta_pendiente).to.eql(true));pm.test('sin la contraseña en la respuesta', () => pm.expect(pm.response.text()).to.not.include(pm.variables.get('satrackPassword')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sincronizar flota (reutiliza la pendiente)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cuenta-satelital/sincronizar",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.test('una sola consulta pendiente por cuenta', () => pm.expect(body.status).to.be.oneOf(['pendiente', 'aceptado']));",
+                  "pm.collectionVariables.set('jobId', body.job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado de la consulta de flota",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/consultas-satelitales/{{jobId}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const n = Number(pm.collectionVariables.get('intentos') || 0);",
+                  "if (!(body.estado !== 'pendiente') && n < 60) {",
+                  "  pm.collectionVariables.set('intentos', n + 1);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "} else {",
+                  "  pm.collectionVariables.set('intentos', 0);",
+                  "  pm.test('consulta resuelta', () => pm.expect(body.estado).to.eql('ok'));",
+                  "  ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cuenta satelital",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/cuenta-satelital",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sin consultas pendientes', () => pm.expect(pm.response.json().consulta_pendiente).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-03 · Registro de la operación",
+      "description": "Viajes, validaciones, catálogos y transición a en ruta.",
+      "item": [
+        {
+          "name": "Crear viaje",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"manifiesto\": \"{{manifiesto}}\",\n  \"origen\": \"Bogotá\",\n  \"destino\": \"Girardot\",\n  \"salida_estimada\": \"{{salida}}\",\n  \"llegada_estimada\": \"{{llegada}}\",\n  \"conductor\": {\n    \"nombre\": \"Conductor Postman\",\n    \"cedula\": \"1012345678\",\n    \"telefono\": \"3001234567\",\n    \"autoriza_contacto\": true\n  },\n  \"vehiculo\": {\n    \"placa\": \"{{placa}}\",\n    \"propietario\": \"Flota Postman\"\n  },\n  \"remesas\": [\n    {\n      \"numero\": \"R-1\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 1000,\n      \"cantidad\": 10\n    },\n    {\n      \"numero\": \"R-2\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 500\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('manifiesto', 'MAN-' + Date.now());",
+                  "pm.collectionVariables.set('salida', new Date(Date.now() + 30 * 60e3).toISOString());",
+                  "pm.collectionVariables.set('llegada', new Date(Date.now() + 8 * 3600e3).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const trip = pm.response.json();",
+                  "pm.collectionVariables.set('tripId', trip.id);",
+                  "pm.test('peso calculado de las remesas', () => pm.expect(trip.peso_salida_kg).to.eql(1500));",
+                  "pm.test('placa verificada => programado', () => pm.expect(trip.estado).to.eql('programado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manifiesto duplicado (409)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"manifiesto\": \"{{manifiesto}}\",\n  \"origen\": \"Bogotá\",\n  \"destino\": \"Girardot\",\n  \"salida_estimada\": \"{{salida}}\",\n  \"llegada_estimada\": \"{{llegada}}\",\n  \"conductor\": {\n    \"nombre\": \"Conductor Postman\",\n    \"cedula\": \"1012345678\",\n    \"telefono\": \"3001234567\",\n    \"autoriza_contacto\": true\n  },\n  \"vehiculo\": {\n    \"placa\": \"{{placa}}\",\n    \"propietario\": \"Flota Postman\"\n  },\n  \"remesas\": [\n    {\n      \"numero\": \"R-1\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 1000,\n      \"cantidad\": 10\n    },\n    {\n      \"numero\": \"R-2\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 500\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Viaje inválido (422)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"manifiesto\": \"MAN-INVALIDO\",\n  \"origen\": \"Bogotá\",\n  \"destino\": \"Bogotá\",\n  \"salida_estimada\": \"{{salida}}\",\n  \"llegada_estimada\": \"{{llegada}}\",\n  \"conductor\": {\n    \"nombre\": \"Conductor Postman\",\n    \"cedula\": \"1012345678\",\n    \"telefono\": \"3001234567\",\n    \"autoriza_contacto\": true\n  },\n  \"vehiculo\": {\n    \"placa\": \"{{placa}}\",\n    \"propietario\": \"Flota Postman\"\n  },\n  \"remesas\": [\n    {\n      \"numero\": \"R-1\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 1000,\n      \"cantidad\": 10\n    },\n    {\n      \"numero\": \"R-2\",\n      \"cliente\": \"Cliente\",\n      \"peso_kg\": 500\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('errores por campo', () => pm.expect(pm.response.json().errores).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Plantilla Excel",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/viajes/plantilla",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('es un .xlsx', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('spreadsheetml'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Importar archivo inválido (422)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes/importar",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "esto no es un excel"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('mensaje sin datos del archivo', () => pm.expect(pm.response.json().detail).to.eql('El archivo debe ser un Excel .xlsx'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar viajes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/viajes?q={{placa}}&page=1&page_size=20",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('incluye el viaje creado', () => pm.expect(pm.response.json().items.map(t => t.id)).to.include(Number(pm.collectionVariables.get('tripId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle del viaje",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/viajes/{{tripId}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('trae remesas y eventos', () => { const t = pm.response.json(); pm.expect(t.remesas).to.have.length(2); pm.expect(t.eventos).to.not.be.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vehículos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/vehiculos",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('incluye la placa', () => pm.expect(pm.response.json().items.map(v => v.placa)).to.include(pm.collectionVariables.get('placa')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conductores",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/conductores",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('catálogo sin duplicados', () => pm.expect(pm.response.json().items.filter(c => c.cedula === '1012345678')).to.have.length(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar ruta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes/{{tripId}}/transiciones",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_ruta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('en ruta', () => pm.expect(pm.response.json().estado).to.eql('en_ruta'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-06 · Posiciones e historial",
+      "description": "Consulta de posiciones del viaje en ruta e historial.",
+      "item": [
+        {
+          "name": "Consultar posiciones",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/cuenta-satelital/consultar",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('jobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado de la consulta de posiciones",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/consultas-satelitales/{{jobId}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const n = Number(pm.collectionVariables.get('intentos') || 0);",
+                  "if (!(body.estado !== 'pendiente') && n < 60) {",
+                  "  pm.collectionVariables.set('intentos', n + 1);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "} else {",
+                  "  pm.collectionVariables.set('intentos', 0);",
+                  "  pm.test('consulta resuelta', () => pm.expect(body.estado).to.eql('ok'));",
+                  "  ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historial del viaje",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/viajes/{{tripId}}/posiciones",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.test('al menos una posición con coordenadas', () => { pm.expect(rows).to.not.be.empty; pm.expect(rows.at(-1).lat).to.be.a('number'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Última ubicación del vehículo",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/vehiculos",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const v = pm.response.json().items.find(v => v.placa === pm.collectionVariables.get('placa'));",
+                  "pm.test('tiene última posición', () => pm.expect(v.ultima_posicion).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-13 · Indicadores",
+      "description": "Panel de la transportadora.",
+      "item": [
+        {
+          "name": "Panel",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/panel",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cuenta el viaje en ruta', () => pm.expect(pm.response.json().conteos.en_ruta).to.be.at.least(1));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-04 · Microservicio Satrack",
+      "description": "API del scraper directamente, con API key. Ver también satrack-service/postman.",
+      "item": [
+        {
+          "name": "Salud del scraper",
+          "request": {
+            "method": "GET",
+            "url": "{{satrackUrl}}/health",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('proveedor simulador', () => pm.expect(pm.response.json().provider).to.eql('simulator'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API key inválida (401)",
+          "request": {
+            "method": "POST",
+            "url": "{{satrackUrl}}/v1/jobs",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "invalida"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": \"{{$guid}}\",\n  \"type\": \"positions\",\n  \"account\": {\n    \"id\": \"p\",\n    \"username\": \"demo\",\n    \"password\": \"x\"\n  },\n  \"plates\": [\n    \"ABC123\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear job de posiciones",
+          "request": {
+            "method": "POST",
+            "url": "{{satrackUrl}}/v1/jobs",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_id\": \"{{$guid}}\",\n  \"type\": \"positions\",\n  \"account\": {\n    \"id\": \"postman\",\n    \"username\": \"demo\",\n    \"password\": \"{{satrackPassword}}\"\n  },\n  \"plates\": [\n    \"{{placa}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('satJobId', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resultado del job",
+          "request": {
+            "method": "GET",
+            "url": "{{satrackUrl}}/v1/jobs/{{satJobId}}",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const n = Number(pm.collectionVariables.get('intentos') || 0);",
+                  "if (!(body.status === 'done') && n < 60) {",
+                  "  pm.collectionVariables.set('intentos', n + 1);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "  setTimeout(() => {}, 1000);",
+                  "} else {",
+                  "  pm.collectionVariables.set('intentos', 0);",
+                  "  pm.test('job terminado', () => pm.expect(body.status).to.eql('done'));",
+                  "  pm.test('posición de la placa', () => pm.expect(body.result.positions[0].plate).to.eql(pm.collectionVariables.get('placa')));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EP-02 · Cierre",
+      "description": "Entrega el viaje (permite repetir la colección) y cierra la sesión.",
+      "item": [
+        {
+          "name": "Entregar viaje",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/viajes/{{tripId}}/transiciones",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"entregado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token revocado (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/auth/me",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

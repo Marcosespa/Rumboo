@@ -12,6 +12,13 @@ class TransportadoraDTO(BaseModel):
     nombre: str
 
 
+class ConfiguracionDTO(BaseModel):
+    """Parámetros vigentes de la transportadora; solo los que ya usa el backend."""
+    model_config = ConfigDict(frozen=True)
+    frecuencia_consulta_min: int
+    zona_horaria: str = "America/Bogota"
+
+
 class UsuarioDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
     id: int

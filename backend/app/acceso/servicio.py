@@ -2,7 +2,7 @@ import secrets
 from datetime import timedelta
 from sqlalchemy import delete, select
 from app.acceso.models import Sesion, Transportadora, Usuario
-from app.acceso.schemas import TransportadoraDTO, UsuarioDTO
+from app.acceso.schemas import ConfiguracionDTO, TransportadoraDTO, UsuarioDTO
 from app.core.db import aware, now
 from app.core.errores import NoAutorizado
 from app.core.seguridad import hash_password, token_hash, verify_password
@@ -69,3 +69,7 @@ def lock_carrier(db, tenant):
 
 def query_frequency_min(db, tenant):
     return db.get(Transportadora, tenant).frecuencia_consulta_min
+
+
+def configuracion(db, tenant):
+    return ConfiguracionDTO(frecuencia_consulta_min=query_frequency_min(db, tenant))

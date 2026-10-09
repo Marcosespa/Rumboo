@@ -1,8 +1,8 @@
 """Mensajería: conversación con el conductor por WhatsApp (OpenWA). Se implementa en M3, tras un spike de OpenWA.
 
 Será dueño de: canales_whatsapp (sesión OpenWA por transportadora, secretos cifrados), mensajes.
-Hará: enviar por la cola de tareas persistida con `Idempotency-Key`, recibir el webhook firmado
-(`X-OpenWA-Signature`, sha256 sobre el body original) y deduplicar por id externo, descargar fotos y audios en
+Hará: enviar desde intenciones persistidas, recibir webhooks autenticados según el contrato
+verificado de la versión de OpenWA elegida y deduplicar por id externo, descargar fotos y audios en
 segundo plano, bandeja de mensajes sin viaje con asociación humana, verificar consentimiento antes de contactos
 automáticos, solicitudes y recordatorios de cumplido (2 h; escalamiento a 6/24 h).
 

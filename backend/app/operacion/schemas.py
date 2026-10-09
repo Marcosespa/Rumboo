@@ -84,6 +84,27 @@ class RemesaDTO(RemesaInput):
     id: int
 
 
+class ViajeImportadoDTO(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    manifiesto: str
+    id: int
+
+
+class ErrorImportacionDTO(BaseModel):
+    """Error de un manifiesto: filas de Excel, columna y mensaje; nunca el valor de la celda."""
+    model_config = ConfigDict(frozen=True)
+    manifiesto: str
+    filas: tuple[int, ...]
+    campo: str | None
+    mensaje: str
+
+
+class ResultadoImportacionDTO(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    creados: tuple[ViajeImportadoDTO, ...]
+    errores: tuple[ErrorImportacionDTO, ...]
+
+
 class ViajeDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
     id: int

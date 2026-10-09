@@ -2,7 +2,18 @@
 name = "rumboo-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "pydantic-settings>=2.7,<3", "httpx>=0.28,<1", "sqlalchemy>=2.0,<2.1", "psycopg[binary]>=3.2,<4", "alembic>=1.14,<2", "bcrypt>=4.2,<6", "cryptography>=44,<48"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "pydantic-settings>=2.7,<3",
+    "httpx>=0.28,<1",
+    "sqlalchemy>=2.0,<2.1",
+    "psycopg[binary]>=3.2,<4",
+    "alembic>=1.14,<2",
+    "bcrypt>=4.2,<6",
+    "cryptography>=44,<48",
+    "openpyxl>=3.1,<4",
+]
 [dependency-groups]
 dev = [
     "import-linter>=2.15",
@@ -20,10 +31,9 @@ include_external_packages = true
 name = "Capas: cada módulo solo depende de los de abajo; los de una misma capa no se conocen"
 type = "layers"
 layers = [
-    "app.main : app.cli : app.modelos",
-    "app.agentes",
+    "app.main : app.cli : app.modelos : app.consultas",
     "app.indicadores",
-    "app.monitoreo | app.mensajeria | app.documentos",
+    "app.monitoreo | app.mensajeria | app.documentos | app.voz",
     "app.satelital",
     "app.operacion",
     "app.acceso",
@@ -34,33 +44,40 @@ layers = [
 [[tool.importlinter.contracts]]
 name = "Las tablas de acceso solo se tocan desde acceso"
 type = "forbidden"
-source_modules = ["app.core", "app.auditoria", "app.operacion", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.agentes"]
+source_modules = ["app.core", "app.auditoria", "app.operacion", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.voz", "app.consultas"]
 forbidden_modules = ["app.acceso.models"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Las tablas de auditoria solo se tocan desde auditoria"
 type = "forbidden"
-source_modules = ["app.core", "app.acceso", "app.operacion", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.agentes"]
+source_modules = ["app.core", "app.acceso", "app.operacion", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.voz", "app.consultas"]
 forbidden_modules = ["app.auditoria.models"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Las tablas de operacion solo se tocan desde operacion"
 type = "forbidden"
-source_modules = ["app.core", "app.auditoria", "app.acceso", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.agentes"]
+source_modules = ["app.core", "app.auditoria", "app.acceso", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.voz", "app.consultas"]
 forbidden_modules = ["app.operacion.models"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Las tablas de satelital solo se tocan desde satelital"
 type = "forbidden"
-source_modules = ["app.core", "app.auditoria", "app.acceso", "app.operacion", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.agentes"]
+source_modules = ["app.core", "app.auditoria", "app.acceso", "app.operacion", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.voz", "app.consultas"]
 forbidden_modules = ["app.satelital.models"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "La lógica de negocio y core no dependen de FastAPI (sirven igual a routers, tareas y agentes)"
 type = "forbidden"
-source_modules = ["app.core.config", "app.core.db", "app.core.errores", "app.core.eventos", "app.core.paginacion", "app.core.seguridad", "app.core.tareas", "app.*.servicio", "app.*.models", "app.*.schemas", "app.*.enlaces", "app.satelital.cliente"]
+source_modules = ["app.consultas", "app.core.models", "app.core.config", "app.core.db", "app.core.errores", "app.core.eventos", "app.core.paginacion", "app.core.seguridad", "app.core.tareas", "app.*.servicio", "app.*.models", "app.*.schemas", "app.*.enlaces", "app.*.excel", "app.satelital.cliente"]
 forbidden_modules = ["fastapi", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "Las entregas técnicas solo se tocan desde core"
+type = "forbidden"
+source_modules = ["app.acceso", "app.auditoria", "app.operacion", "app.satelital", "app.documentos", "app.mensajeria", "app.monitoreo", "app.indicadores", "app.voz", "app.consultas"]
+forbidden_modules = ["app.core.models"]
+allow_indirect_imports = true

@@ -46,13 +46,22 @@ class Bus:
             return None
         at = now()
         with self.sessions() as db:
-            row = db.scalar(select(EntregaPendiente).where(
-                EntregaPendiente.destinatario.in_(tuple(self._consumidores)),
-                or_((EntregaPendiente.estado == "pendiente") & (EntregaPendiente.proximo_intento <= at),
-                    (EntregaPendiente.estado == "ejecutando") & (EntregaPendiente.reclamada_hasta <= at))
-            ).order_by(EntregaPendiente.creado_en, EntregaPendiente.id).with_for_update(skip_locked=True).limit(1))
-            if row is None:
-                return None
+            while True:
+                row = db.scalar(select(EntregaPendiente).where(
+                    EntregaPendiente.destinatario.in_(tuple(self._consumidores)),
+                    or_((EntregaPendiente.estado == "pendiente") & (EntregaPendiente.proximo_intento <= at),
+                        (EntregaPendiente.estado == "ejecutando") & (EntregaPendiente.reclamada_hasta <= at))
+                ).order_by(EntregaPendiente.creado_en, EntregaPendiente.id).with_for_update(skip_locked=True).limit(1))
+                if row is None:
+                    return None
+                if row.intentos < self.max_intentos:
+                    break
+                # Agotada: queda para revisión y no impide reclamar las siguientes.
+                row.estado = "fallido"
+                row.error_codigo = "RETRIES_EXHAUSTED"
+                row.reclamacion = None
+                row.reclamada_hasta = None
+                db.commit()
             row.estado = "ejecutando"
             row.intentos += 1
             row.reclamacion = str(uuid4())
